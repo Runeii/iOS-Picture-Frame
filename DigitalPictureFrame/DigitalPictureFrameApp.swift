@@ -107,37 +107,6 @@ struct DigitalPictureFrameApp: App {
         }
     }
 
-    func interleavePortraitAndLandscapeAssets(portraitAssets: [PHAsset], landscapeAssets: [PHAsset]) -> [PHAsset] {
-        let shuffledLandscape = landscapeAssets.shuffled()
-        let shuffledPortrait = portraitAssets.shuffled()
-
-        var portraitPairs: [[PHAsset]] = []
-        var portraitIndex = 0
-
-        while portraitIndex + 1 < shuffledPortrait.count {
-            portraitPairs.append([shuffledPortrait[portraitIndex], shuffledPortrait[portraitIndex + 1]])
-            portraitIndex += 2
-        }
-
-        var finalAssets: [PHAsset] = []
-        var landscapeIndex = 0
-
-        for pair in portraitPairs {
-            if landscapeIndex < shuffledLandscape.count {
-                finalAssets.append(shuffledLandscape[landscapeIndex])
-                landscapeIndex += 1
-            }
-            finalAssets.append(contentsOf: pair)
-        }
-
-        while landscapeIndex < shuffledLandscape.count {
-            finalAssets.append(shuffledLandscape[landscapeIndex])
-            landscapeIndex += 1
-        }
-
-        return finalAssets
-    }
-
     func jumpToNextSlide() {
         guard !self.photoAssets.isEmpty else { return }
 
@@ -159,7 +128,7 @@ struct DigitalPictureFrameApp: App {
         }
         
         let assetManager = StorageManager.shared
-        assetManager.storeOrUpdateAssetSeenTime(asset: photoAssets[currentImageIndex])
+        assetManager.storeOrUpdateAssetSeenTime(assetId: photoAssets[currentImageIndex].localIdentifier)
 
         // Invalidate any previous timer
         slideTimer?.invalidate()

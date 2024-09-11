@@ -1,28 +1,49 @@
-//
-//  StorageManager.swift
-//  DigitalPictureFrame
-//
-//  Created by Andrew Hill on 11/09/2024.
-//
-
 import Foundation
-import Foundation
-import Photos
 
 class StorageManager {
-    static let shared = StorageManager()  // Singleton instance for global access
+    static let shared = StorageManager()
 
-    private var storage: [String: Date] = [:]  // Dictionary to store asset IDs and dates
-
-    // Method to store or update an asset's ID with the current date
-    func storeOrUpdateAssetSeenTime(asset: PHAsset) {
-        let assetID = asset.localIdentifier  // Get the unique identifier of the PHAsset
-        storage[assetID] = Date()  // Store or update the date to now
+    private var storage: [String: Date] = [:] {
+        didSet {
+            saveStorage()
+        }
     }
 
-    // Method to get the date an asset was added, if available
-    func getLastSeenTime(asset: PHAsset) -> Date? {
-        let assetID = asset.localIdentifier
-        return storage[assetID]
+    private var storageURL: URL {
+        let documentDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return documentDirectory.appendingPathComponent("AssetSeenTimes.json")
+    }
+
+    init() {
+        loadStorage()
+    }
+
+    func storeOrUpdateAssetSeenTime(assetId: String) {
+        storage[assetId] = Date()
+    }
+
+    func getLastSeenTime(assetId: String?) -> Date? {
+        guard let assetId = assetId else {
+            return nil
+        }
+        return storage[assetId]
+    }
+
+    private func loadStorage() {
+        do {
+            let data = try Data(contentsOf: storageURL)
+            storage = try JSONDecoder().decode([String: Date].self, from: data)
+        } catch {
+            print("Error loading storage: \(error)")
+        }
+    }
+
+    private func saveStorage() {
+        do {
+            let data = try JSONEncoder().encode(storage)
+            try data.write(to: storageURL, options: [.atomicWrite])
+        } catch {
+            print("Error saving storage: \(error)")
+        }
     }
 }

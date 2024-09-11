@@ -118,7 +118,7 @@ func biasAssets(assets: [[PHAsset]]) -> [[PHAsset]] {
     var seenAssets: [[PHAsset]] = []
 
     for assetGroup in assets {
-        if let dateLastSeen = assetGroup.first?.modificationDate {
+        if let dateLastSeen = StorageManager.shared.getLastSeenTime(assetId: assetGroup.first?.localIdentifier) {
             seenAssets.append(assetGroup)
         } else {
             neverSeenAssets.append(assetGroup)
@@ -131,8 +131,8 @@ func biasAssets(assets: [[PHAsset]]) -> [[PHAsset]] {
     // Shuffle and bias the seen assets
     seenAssets.shuffle()
     seenAssets.sort { group1, group2 in
-        let dateLastSeen1 = group1.first!.modificationDate!
-        let dateLastSeen2 = group2.first!.modificationDate!
+        let dateLastSeen1 = StorageManager.shared.getLastSeenTime(assetId: group1.first?.localIdentifier)!
+        let dateLastSeen2 = StorageManager.shared.getLastSeenTime(assetId: group2.first?.localIdentifier)!
         let assetMonth1 = Calendar.current.component(.month, from: dateLastSeen1)
         let assetMonth2 = Calendar.current.component(.month, from: dateLastSeen2)
         let assetYear1 = Calendar.current.component(.year, from: dateLastSeen1)
