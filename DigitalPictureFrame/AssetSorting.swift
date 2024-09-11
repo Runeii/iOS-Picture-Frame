@@ -18,10 +18,10 @@ func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
 
     // Step 2: Group portraits into pairs by date
     let portraitPairs = groupPortraits(assets: portrait)
-    
+
     // Step 3: Shuffle portrait pairs and landscapes with bias
-    let biasedPortraitPairs = biasAssets(assets: portraitPairs, biasStrength: biasStrength)
-    let biasedLandscapes = biasAssets(assets: landscape.map { [$0] }, biasStrength: biasStrength).flatMap { $0 }
+    let biasedPortraitPairs = biasAssets(assets: portraitPairs)
+    let biasedLandscapes = biasAssets(assets: landscape.map { [$0] }).flatMap { $0 }
 
     // Step 4: Interleave the biased portrait pairs and landscapes
     return interleavePortraitsAndLandscapes(portraits: biasedPortraitPairs, landscapes: biasedLandscapes)
@@ -51,30 +51,43 @@ func separateAssets(assets: [PHAsset]) -> (landscape: [PHAsset], portrait: [PHAs
 }
 
 // 2.1
-func sortAssetsByDate(assets: [PHAsset]) -> [PHAsset] {
-    return assets.sorted { (asset1, asset2) -> Bool in
-        guard let date1 = asset1.creationDate, let date2 = asset2.creationDate else { return false }
-        return date1 > date2
+func groupPortraits(assets: [PHAsset]) -> [[PHAsset]] {
+    let sortedAssets = sortAssetsByDate(assets: assets)
+    var groupedAssets = [[PHAsset]]()
+    var remainingAssets = [PHAsset]()
+
+    // First pass: Try to form pairs based on the given criteria
+    var i = 0
+    while i < sortedAssets.count {
+        if i + 1 < sortedAssets.count {
+            let asset = sortedAssets[i]
+            let nextAsset = sortedAssets[i + 1]
+            if isWithinTimeFrame(asset, nextAsset, minutes: 2) || isSameDay(asset, nextAsset) {
+                groupedAssets.append([asset, nextAsset])
+                i += 2 // Skip the next asset since it's already paired
+                continue
+            }
+        }
+        remainingAssets.append(sortedAssets[i])
+        i += 1
     }
+
+    // Second pass: Handle any remaining assets by shuffling and forming pairs
+    remainingAssets.shuffle()
+    var finalGroups = groupedAssets
+    var j = 0
+    while j < remainingAssets.count - 1 { // Ensure there's at least one more asset to form a pair
+        finalGroups.append([remainingAssets[j], remainingAssets[j + 1]])
+        j += 2
+    }
+
+    // Any leftover single asset is discarded, as per requirements
+    return finalGroups
 }
 
 // 2.2
-func groupPortraits(assets: [PHAsset]) -> [[PHAsset]] {
-    let sortedAssets = sortAssetsByDate(assets: assets) // Sort by date first
-
-    guard sortedAssets.count > 1 else { return sortedAssets.map { [$0] } }
-
-    let groupedAssets = sortedAssets.reduce(into: [[PHAsset]]()) { result, asset in
-        if let lastGroup = result.last, let lastAsset = lastGroup.last, isWithinTimeFrame(asset, lastAsset, minutes: 2) {
-            result[result.count - 1].append(asset)
-        } else if let lastGroup = result.last, let lastAsset = lastGroup.last, isSameDay(asset, lastAsset) {
-            result[result.count - 1].append(asset)
-        } else {
-            result.append([asset])
-        }
-    }
-    
-    return groupedAssets
+func sortAssetsByDate(assets: [PHAsset]) -> [PHAsset] {
+    return assets.sorted { $0.creationDate ?? Date.distantPast < $1.creationDate ?? Date.distantPast }
 }
 
 
@@ -93,99 +106,49 @@ func isSameDay(_ asset1: PHAsset, _ asset2: PHAsset) -> Bool {
 }
 
 //3.1
-func biasAssets(assets: [[PHAsset]], biasStrength: Double) -> [[PHAsset]] {
-    // Separate bias strengths for recency and seasonality
-    let recencyBiasStrength = 0.7
-    let seasonBiasStrength = 0.5
-    let currentSeason = getCurrentSeason()
-
-    return assets.shuffled().sorted { assetGroup1, assetGroup2 in
-        let dateAdded1 = assetGroup1.first?.modificationDate ?? Date.distantPast
-        let dateAdded2 = assetGroup2.first?.modificationDate ?? Date.distantPast
-
-        let isRecent1 = isRecent(date: dateAdded1)
-        let isRecent2 = isRecent(date: dateAdded2)
-
-        let isInCurrentSeason1 = isInCurrentSeason(assetGroup1, season: currentSeason)
-        let isInCurrentSeason2 = isInCurrentSeason(assetGroup2, season: currentSeason)
-
-        // Apply recency bias and seasonal bias (only for previous years' images)
-        let currentYear = Calendar.current.component(.year, from: Date())
-        let assetYear1 = Calendar.current.component(.year, from: assetGroup1.first?.creationDate ?? Date.distantPast)
-        let assetYear2 = Calendar.current.component(.year, from: assetGroup2.first?.creationDate ?? Date.distantPast)
-
-        let recencyBias1 = isRecent1 ? recencyBiasStrength : 0
-        let recencyBias2 = isRecent2 ? recencyBiasStrength : 0
-
-        let seasonBias1 = (assetYear1 < currentYear && isInCurrentSeason1) ? seasonBiasStrength : 0
-        let seasonBias2 = (assetYear2 < currentYear && isInCurrentSeason2) ? seasonBiasStrength : 0
-
-        // Calculate total bias
-        let totalBias1 = recencyBias1 * biasStrength + seasonBias1 * biasStrength
-        let totalBias2 = recencyBias2 * biasStrength + seasonBias2 * biasStrength
-
-        // Add some randomness to the bias to allow for shuffling feel
-        let randomFactor1 = Double.random(in: 0...1)
-        let randomFactor2 = Double.random(in: 0...1)
-
-        // Combine bias and randomness to get a final "weighted" score
-        let finalScore1 = totalBias1 + (1 - biasStrength) * randomFactor1
-        let finalScore2 = totalBias2 + (1 - biasStrength) * randomFactor2
-
-        // Sort based on the final score
-        return finalScore1 > finalScore2
-    }
-}
-
-// Modify the recency function to check if an asset was added to the album in the last week
-func isRecent(date: Date) -> Bool {
-    let calendar = Calendar.current
-    // Calculate the number of days since the asset was added to the album
-    let daysSinceAdded = calendar.dateComponents([.day], from: date, to: Date()).day ?? Int.max
-    return daysSinceAdded <= 7 // Consider recent if added in the last week
-}
-
-// Seasonal bias only for assets from previous years
-func isInCurrentSeason(_ assets: [PHAsset], season: String) -> Bool {
-    guard let creationDate = assets.first?.creationDate else { return false }
-    let assetYear = Calendar.current.component(.year, from: creationDate)
+func biasAssets(assets: [[PHAsset]]) -> [[PHAsset]] {
+    let recencyBiasStrength: Double = 0.8
+    let seasonBiasStrength: Double = 0.5
+    
+    let currentMonth = Calendar.current.component(.month, from: Date())
     let currentYear = Calendar.current.component(.year, from: Date())
 
-    if assetYear == currentYear {
-        // No seasonal bias for current year images
-        return false
+    // Categorize assets based on whether they have been seen before
+    var neverSeenAssets: [[PHAsset]] = []
+    var seenAssets: [[PHAsset]] = []
+
+    for assetGroup in assets {
+        if let dateLastSeen = assetGroup.first?.modificationDate {
+            seenAssets.append(assetGroup)
+        } else {
+            neverSeenAssets.append(assetGroup)
+        }
     }
 
-    let month = Calendar.current.component(.month, from: creationDate)
-    switch season {
-    case "Spring":
-        return (3...5).contains(month)
-    case "Summer":
-        return (6...8).contains(month)
-    case "Autumn":
-        return (9...11).contains(month)
-    case "Winter":
-        return month == 12 || (1...2).contains(month)
-    default:
-        return false
+    // Shuffle the never seen before assets randomly
+    neverSeenAssets.shuffle()
+
+    // Shuffle and bias the seen assets
+    seenAssets.shuffle()
+    seenAssets.sort { group1, group2 in
+        let dateLastSeen1 = group1.first!.modificationDate!
+        let dateLastSeen2 = group2.first!.modificationDate!
+        let assetMonth1 = Calendar.current.component(.month, from: dateLastSeen1)
+        let assetMonth2 = Calendar.current.component(.month, from: dateLastSeen2)
+        let assetYear1 = Calendar.current.component(.year, from: dateLastSeen1)
+        let assetYear2 = Calendar.current.component(.year, from: dateLastSeen2)
+
+        let olderBias1 = dateLastSeen1 < dateLastSeen2 ? recencyBiasStrength : 0
+        let olderBias2 = dateLastSeen2 < dateLastSeen1 ? recencyBiasStrength : 0
+        let seasonBias1 = (assetMonth1 == currentMonth && assetYear1 < currentYear) ? seasonBiasStrength : 0
+        let seasonBias2 = (assetMonth2 == currentMonth && assetYear2 < currentYear) ? seasonBiasStrength : 0
+
+        return olderBias1 + seasonBias1 > olderBias2 + seasonBias2
     }
+
+    // Append the previously seen to the end of the never before seen
+    return neverSeenAssets + seenAssets
 }
-
-func getCurrentSeason() -> String {
-    let month = Calendar.current.component(.month, from: Date())
-    switch month {
-    case 3...5:
-        return "Spring"
-    case 6...8:
-        return "Summer"
-    case 9...11:
-        return "Autumn"
-    default:
-        return "Winter"
-    }
-}
-
-
 
 // 4
 func interleavePortraitsAndLandscapes(portraits: [[PHAsset]], landscapes: [PHAsset]) -> [PHAsset] {

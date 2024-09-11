@@ -10,14 +10,20 @@ struct DigitalPictureFrameApp: App {
     @State private var photoAssets: [PHAsset] = []
 
     @State private var isLowPowerModeEnabled: Bool = false
+    @State private var isUserTouching: Bool = false
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 // Single ContentView to handle image display with fade transition
-                ContentView(photoAssets: $photoAssets, currentImageIndex: $currentImageIndex, onSlideDisplayed: { index in
-                    self.startNextSlideTimer()
-                })
+                ContentView(
+                    photoAssets: $photoAssets,
+                    currentImageIndex: $currentImageIndex,
+                    isUserTouching: $isUserTouching,
+                    onSlideDisplayed: { index in
+                        self.startNextSlideTimer()
+                    }
+                )
                 .transition(.opacity)  // Apply fading transition between slides
                 .edgesIgnoringSafeArea(.all)  // Extend content to the screen edges
             }
@@ -34,6 +40,14 @@ struct DigitalPictureFrameApp: App {
                     self.startNextSlideTimer()
                 }
             }
+            .onLongPressGesture(minimumDuration: .infinity, pressing: { isTouching in
+                self.isUserTouching = isTouching
+                if isTouching {
+                    slideTimer?.invalidate()
+                } else {
+                    self.startNextSlideTimer()
+                }
+            }, perform: {})
         }
     }
 
@@ -55,7 +69,7 @@ struct DigitalPictureFrameApp: App {
 
     // Schedule hourly refresh of the album to fetch new photos
     func scheduleHourlyPhotoFetch() {
-        Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+        Timer.scheduledTimer(withTimeInterval: 60 * 60, repeats: true) { _ in
             if !self.isLowPowerModeEnabled {
                 fetchPhotosFromAlbum(albumName: "Picture Frame")
             }
@@ -85,10 +99,12 @@ struct DigitalPictureFrameApp: App {
         assetFetchOptions.fetchLimit = 0
 
         let result: PHFetchResult<PHAsset> = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
-        print(result.count)
-        self.photoAssets = processAssets(assets: result)
-        print(self.photoAssets.count)
-        self.currentImageIndex = 0
+        let formattedResult = processAssets(assets: result)
+        
+        if (formattedResult.count != photoAssets.count) {
+            self.photoAssets = formattedResult
+            self.currentImageIndex = 0
+        }
     }
 
     func interleavePortraitAndLandscapeAssets(portraitAssets: [PHAsset], landscapeAssets: [PHAsset]) -> [PHAsset] {
@@ -141,6 +157,10 @@ struct DigitalPictureFrameApp: App {
         guard !isLowPowerModeEnabled else {
             return
         }
+        
+        let assetManager = StorageManager.shared
+        assetManager.storeOrUpdateAssetSeenTime(asset: photoAssets[currentImageIndex])
+
         // Invalidate any previous timer
         slideTimer?.invalidate()
 
@@ -158,7 +178,7 @@ struct DigitalPictureFrameApp: App {
         lightMonitor.startLightMonitor { isLowPower in
             self.isLowPowerModeEnabled = isLowPower
             if !isLowPower {
-                self.jumpToNextSlide()
+                fetchPhotosFromAlbum(albumName: "Picture Frame")
             }
         }
     }

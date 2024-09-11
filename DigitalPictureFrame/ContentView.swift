@@ -1,10 +1,12 @@
 import SwiftUI
 import Photos
 import UIKit
+import CoreLocation
 
 struct ContentView: View {
     @Binding var photoAssets: [PHAsset]
     @Binding var currentImageIndex: Int
+    @Binding var isUserTouching: Bool
 
     var onSlideDisplayed: (Int) -> Void
 
@@ -15,7 +17,9 @@ struct ContentView: View {
     @State private var nextLeftImage: UIImage? = nil
     @State private var nextRightImage: UIImage? = nil
     @State private var fadeProgress: Double = 1.0
-
+    
+    @State private var locationName: String = "Loading..."
+    
     var body: some View {
         ZStack {
             // For portrait mode with two images side by side
@@ -49,11 +53,23 @@ struct ContentView: View {
                     .clipped()
                     .opacity(1.0 - fadeProgress)
             }
-            // Text indicator for the current slide index
-            Text("Slide \(displayImageIndex + 1) of \(photoAssets.count)")
-                .font(.caption) // Customize the font as needed
-                .padding([.leading, .bottom], 16) // Padding to offset from bottom left corner
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            if let currentLeftImage = currentLeftImage {
+                VStack(alignment: .leading) {
+                    Spacer()
+                    Text("Slide \(displayImageIndex + 1) of \(photoAssets.count)")
+                        .padding(.bottom, 2)
+                    Text("Date taken: \(formatDate(photoAssets[currentImageIndex].creationDate))")
+                        .padding(.bottom, 2)
+                    Text("Location: \(locationName)")
+                        .onAppear() { updatePlace() }
+                        .onChange(of: currentImageIndex) { index in
+                            updatePlace()
+                        }
+                }.font(.caption) // Customize the font as needed
+                    .opacity(isUserTouching ? 1.0 : 0.0)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding([.leading, .bottom], 16)
+            }
         }
         .onAppear {
             displayImageIndex = currentImageIndex // Initialize display index
@@ -63,6 +79,8 @@ struct ContentView: View {
         }
         .onChange(of: currentImageIndex) { newIndex in
             crossfadeToNewImage(for: newIndex)
+            
+            self.locationName = "Loading..."
         }
     }
 
@@ -149,4 +167,44 @@ struct ContentView: View {
             .frame(width: width, height: UIScreen.main.bounds.height, alignment: .center)
             .clipped()
     }
+    
+    func formatDate(_ date: Date?) -> String {
+        guard let date = date else { return "Unknown" }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    func updatePlace() {
+        guard let location = self.photoAssets[self.currentImageIndex].location else {
+            self.locationName = "No location"
+            return
+        }
+        let geocoder = CLGeocoder()
+        geocoder.reverseGeocodeLocation(location) { placemarks, error in
+            guard let place = placemarks?.first, error == nil else {
+                self.locationName = "Unknown"
+                return
+            }
+            
+            // Create a string from the placemark
+            var placeName = ""
+            
+            if let locality = place.locality {
+                placeName += locality
+            }
+            
+            if let adminRegion = place.administrativeArea {
+                placeName += ", \(adminRegion)"
+            }
+            
+            if let country = place.country {
+                placeName += ", \(country)"
+            }
+            
+            self.locationName = placeName.isEmpty ? "Unknown" : placeName
+        }
+    }
+
 }

@@ -14,6 +14,7 @@
 		496CAC882C8FFF820059E50C /* LightMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496CAC872C8FFF820059E50C /* LightMonitor.swift */; };
 		496CAC8A2C9000FE0059E50C /* PowerSavingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496CAC892C9000FE0059E50C /* PowerSavingManager.swift */; };
 		49EC2FF72C9021F90066436E /* AssetSorting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49EC2FF62C9021F90066436E /* AssetSorting.swift */; };
+		49FF01EE2C9157BC0066F8F9 /* StorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49FF01ED2C9157BC0066F8F9 /* StorageManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +27,7 @@
 		496CAC892C9000FE0059E50C /* PowerSavingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerSavingManager.swift; sourceTree = "<group>"; };
 		49BD4D552C8F64D800D1E8A1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		49EC2FF62C9021F90066436E /* AssetSorting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssetSorting.swift; sourceTree = "<group>"; };
+		49FF01ED2C9157BC0066F8F9 /* StorageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +68,7 @@
 				494FEC1E2C8EF4DD009A2031 /* Preview Content */,
 				496CAC872C8FFF820059E50C /* LightMonitor.swift */,
 				49EC2FF62C9021F90066436E /* AssetSorting.swift */,
+				49FF01ED2C9157BC0066F8F9 /* StorageManager.swift */,
 			);
 			path = DigitalPictureFrame;
 			sourceTree = "<group>";
@@ -151,6 +154,7 @@
 				49EC2FF72C9021F90066436E /* AssetSorting.swift in Sources */,
 				494FEC1B2C8EF4DC009A2031 /* ContentView.swift in Sources */,
 				494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */,
+				49FF01EE2C9157BC0066F8F9 /* StorageManager.swift in Sources */,
 				496CAC882C8FFF820059E50C /* LightMonitor.swift in Sources */,
 				496CAC8A2C9000FE0059E50C /* PowerSavingManager.swift in Sources */,
 			);
