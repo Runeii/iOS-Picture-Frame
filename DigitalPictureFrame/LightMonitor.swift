@@ -5,8 +5,8 @@ class LightMonitor {
     var isPowerSavingEnabled = false
     
     
-    let homeAssistantURL = "https://home.andrewthomashill.co.uk"
-    let apiToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJiY2E2ZTE3NGVkNjc0NTIxOGEzODg3MDJjYzliNjE3MyIsImlhdCI6MTcyNTk0MTgwOSwiZXhwIjoyMDQxMzAxODA5fQ.a_hnCL6X3CkNFjOcfICo-wkS88tXgNbYbzTKH5L1Mlo"
+    let homeAssistantURL = ProcessInfo.processInfo.environment["HOMEASSISTANT_URL"]
+    let apiToken = ProcessInfo.processInfo.environment["HOMEASSISTANT_TOKEN"] 
     
     let lightEntityID = "light.dining_table_light"
     let sunEntityID = "sun.sun"
