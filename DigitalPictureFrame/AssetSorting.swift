@@ -9,8 +9,6 @@ import Foundation
 import Photos
 
 func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
-    let biasStrength = 0.6
-    
     let filteredAssets = filterDuplicates(assets: assets)
 
     // Step 1: Separate into landscape and portrait
@@ -118,7 +116,7 @@ func biasAssets(assets: [[PHAsset]]) -> [[PHAsset]] {
     var seenAssets: [[PHAsset]] = []
 
     for assetGroup in assets {
-        if let dateLastSeen = StorageManager.shared.getLastSeenTime(assetId: assetGroup.first?.localIdentifier) {
+        if StorageManager.shared.getLastSeenTime(assetId: assetGroup.first?.localIdentifier) != nil {
             seenAssets.append(assetGroup)
         } else {
             neverSeenAssets.append(assetGroup)

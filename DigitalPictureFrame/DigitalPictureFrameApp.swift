@@ -133,7 +133,7 @@ struct DigitalPictureFrameApp: App {
         // Invalidate any previous timer
         slideTimer?.invalidate()
 
-        slideTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { _ in
+        slideTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { _ in
             jumpToNextSlide()
         }
 
