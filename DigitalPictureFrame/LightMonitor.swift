@@ -65,15 +65,16 @@ class LightMonitor {
 
     // Function to get the state of an entity
     private func checkEntityState(entityID: String, completion: @escaping (String?) -> Void) {
-        guard let url = URL(string: "\(homeAssistantURL)/api/states/\(entityID)") else {
-            print("Invalid URL")
+        let url = URL(string: "\(homeAssistantURL!)/api/states/\(entityID)")
+        guard let url = url else {
+            print("Invalid URL", url)
             completion(nil)
             return
         }
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.addValue("Bearer \(apiToken)", forHTTPHeaderField: "Authorization")
+        request.addValue("Bearer \(apiToken!)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
