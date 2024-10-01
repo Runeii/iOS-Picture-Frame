@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4935230A2C95C61A005022EC /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 493523092C95C61A005022EC /* DebugLog.swift */; };
 		494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */; };
 		494FEC1B2C8EF4DC009A2031 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC1A2C8EF4DC009A2031 /* ContentView.swift */; };
 		494FEC1D2C8EF4DD009A2031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 494FEC1C2C8EF4DD009A2031 /* Assets.xcassets */; };
@@ -18,6 +19,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		493523092C95C61A005022EC /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
 		494FEC152C8EF4DC009A2031 /* DigitalPictureFrame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DigitalPictureFrame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalPictureFrameApp.swift; sourceTree = "<group>"; };
 		494FEC1A2C8EF4DC009A2031 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -69,6 +71,7 @@
 				496CAC872C8FFF820059E50C /* LightMonitor.swift */,
 				49EC2FF62C9021F90066436E /* AssetSorting.swift */,
 				49FF01ED2C9157BC0066F8F9 /* StorageManager.swift */,
+				493523092C95C61A005022EC /* DebugLog.swift */,
 			);
 			path = DigitalPictureFrame;
 			sourceTree = "<group>";
@@ -153,6 +156,7 @@
 			files = (
 				49EC2FF72C9021F90066436E /* AssetSorting.swift in Sources */,
 				494FEC1B2C8EF4DC009A2031 /* ContentView.swift in Sources */,
+				4935230A2C95C61A005022EC /* DebugLog.swift in Sources */,
 				494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */,
 				49FF01EE2C9157BC0066F8F9 /* StorageManager.swift in Sources */,
 				496CAC882C8FFF820059E50C /* LightMonitor.swift in Sources */,
