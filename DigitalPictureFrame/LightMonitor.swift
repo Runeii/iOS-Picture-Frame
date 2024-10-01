@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 class LightMonitor {
     let powerSavingManager = PowerSavingManager()
@@ -15,7 +16,6 @@ class LightMonitor {
     
     var onDebug: ((String) -> Void)? = nil
     var lightStatusTimer: DispatchSourceTimer?
-    var sunCheckTimer: DispatchSourceTimer?
     
     func startLightMonitor(
         onPowerModeChanged: @escaping (Bool) -> Void,
@@ -23,72 +23,53 @@ class LightMonitor {
     ) {
         self.onDebug = onDebug
         
-        // Start periodic sun check
-        startPeriodicSunCheck()
+        // Keep the device awake at all times
+        UIApplication.shared.isIdleTimerDisabled = true
         
-        // Start light status monitor
+        // Start light status monitor (now includes sun check as well)
         startLightStatusMonitor(onPowerModeChanged: onPowerModeChanged)
-    }
-    
-    func startPeriodicSunCheck() {
-        let hourInterval = TimeInterval(3600) // 1 hour in seconds
-        
-        sunCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        sunCheckTimer?.schedule(deadline: .now(), repeating: hourInterval)
-        
-        sunCheckTimer?.setEventHandler { [weak self] in
-            guard let self = self else { return }
-            self.onDebug?("Sun check timer fired.")
-            
-            let now = Date()
-            if let lastCheck = self.lastSunCheckDate {
-                if Calendar.current.isDate(now, inSameDayAs: lastCheck) {
-                    return // No need to check if it's the same day
-                }
-            }
-            
-            self.checkEntityState(entityID: self.sunEntityID) { state in
-                self.sunUp = (state == "above_horizon")
-                self.lastSunCheckDate = now
-                self.onDebug?("Sun state updated: \(self.sunUp ? "Up" : "Down")")
-            }
-        }
-        
-        sunCheckTimer?.resume()
     }
     
     func startLightStatusMonitor(
         onPowerModeChanged: @escaping (Bool) -> Void
     ) {
-        let checkInterval = TimeInterval(5 * 60) // 5 minutes in seconds
+        let checkInterval = TimeInterval(3600) // 1 hour in seconds
         
         lightStatusTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
         lightStatusTimer?.schedule(deadline: .now(), repeating: checkInterval)
         
         lightStatusTimer?.setEventHandler { [weak self] in
             guard let self = self else { return }
-            self.checkLightStatus { isOn in
-                self.onDebug?("Light status updated: \(isOn ?? false ? "On" : "Off")")
-                self.onDebug?("Sun is currently \(self.sunUp ? "Up" : "Down")")
+            
+            // Check sun state
+            self.checkEntityState(entityID: self.sunEntityID) { sunState in
+                self.sunUp = (sunState == "above_horizon")
+                self.onDebug?("Sun state updated: \(self.sunUp ? "Up" : "Down")")
+                
+                // After checking sun state, check the light status
+                self.checkLightStatus { isOn in
+                    self.onDebug?("Light status updated: \(isOn ?? false ? "On" : "Off")")
+                    self.onDebug?("Sun is currently \(self.sunUp ? "Up" : "Down")")
 
-                if let isOn = isOn {
-                    if self.sunUp || isOn {
-                        // Sun is up or light is on, disable power-saving mode
-                        if self.isPowerSavingEnabled {
-                            self.isPowerSavingEnabled = false
-                            self.powerSavingManager.setPowerSavingMode(enabled: false)
-                            onPowerModeChanged(false)
+                    if let isOn = isOn {
+                        if self.sunUp || isOn {
+                            // Sun is up or light is on, disable power-saving mode
+                            if self.isPowerSavingEnabled {
+                                self.isPowerSavingEnabled = false
+                                self.powerSavingManager.setPowerSavingMode(enabled: false)
+                                onPowerModeChanged(false)
+                            }
+                        } else {
+                            // It's night, and light is off, enable power-saving mode
+                            if !self.isPowerSavingEnabled {
+                                self.isPowerSavingEnabled = true
+                                self.powerSavingManager.setPowerSavingMode(enabled: true)
+                                onPowerModeChanged(true)
+                            }
                         }
                     } else {
-                        // It's night, and light is off, enable power-saving mode
-                        if !self.isPowerSavingEnabled {
-                            self.isPowerSavingEnabled = true
-                            self.powerSavingManager.setPowerSavingMode(enabled: true)
-                            onPowerModeChanged(true)
-                        }
+                        self.onDebug?("Failed to retrieve light status.")
                     }
-                } else {
-                    self.onDebug?("Failed to retrieve light status.")
                 }
             }
         }
