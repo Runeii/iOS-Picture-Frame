@@ -8,11 +8,53 @@
 import Foundation
 import Photos
 
+extension PHAsset {
+    // Computed property that attempts to extract a custom date from the filename or falls back to creationDate
+    var customDate: Date {
+        if let filename = self.filename, let dateFromFilename = extractDateFromFilename(filename) {
+            return dateFromFilename
+        } else {
+            return self.creationDate ?? Date.distantPast
+        }
+    }
+    
+    // Helper to retrieve the filename of the asset
+    var filename: String? {
+        let resources = PHAssetResource.assetResources(for: self)
+        return resources.first?.originalFilename
+    }
+    
+    // Helper function to extract date from filename in YYYYMMDD format
+    private func extractDateFromFilename(_ filename: String) -> Date? {
+        let regexPattern = "\\b(\\d{8})([-_\\.])"
+        let regex = try? NSRegularExpression(pattern: regexPattern)
+        
+        if let match = regex?.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
+           let dateRange = Range(match.range(at: 1), in: filename) {
+            
+            let dateString = String(filename[dateRange])
+            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyyMMdd"
+            
+            return dateFormatter.date(from: dateString)
+        }
+        return nil
+    }
+    // Computed property to check if customDate has the default time of 00:00:00
+    var hasDefaultTime: Bool {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.hour, .minute, .second], from: self.customDate)
+        return components.hour == 0 && components.minute == 0 && components.second == 0
+    }
+}
+
 func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
     let filteredAssets = filterDuplicates(assets: assets)
+    let timeframedAssets = restrictToTimeFrame(assets: filteredAssets)
 
     // Step 1: Separate into landscape and portrait
-    let (landscape, portrait) = separateAssets(assets: filteredAssets)
+    let (landscape, portrait) = separateAssets(assets: timeframedAssets)
 
     // Step 2: Group portraits into pairs by date
     let portraitPairs = groupPortraits(assets: portrait)
@@ -20,23 +62,76 @@ func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
     // Step 3: Shuffle portrait pairs and landscapes with bias
     let biasedPortraitPairs = biasAssets(assets: portraitPairs)
     let biasedLandscapes = biasAssets(assets: landscape.map { [$0] }).flatMap { $0 }
-
     // Step 4: Interleave the biased portrait pairs and landscapes
     return interleavePortraitsAndLandscapes(portraits: biasedPortraitPairs, landscapes: biasedLandscapes)
 }
 
+// New function to print a timeline of assets grouped by month and year
+func printTimeline(assets: PHFetchResult<PHAsset>) {
+    // Dictionary to store counts by year and month
+    var timelineCounts: [DateComponents: Int] = [:]
+    let calendar = Calendar.current
+
+    // Process each asset
+    assets.enumerateObjects { (asset, _, _) in
+        // Extract year and month from creationDate
+        let components = calendar.dateComponents([.year, .month], from: asset.customDate)
+        
+        // Increment count for the respective month and year
+        if let existingCount = timelineCounts[components] {
+            timelineCounts[components] = existingCount + 1
+        } else {
+            timelineCounts[components] = 1
+        }
+    }
+
+    // Sort by year and month
+    let sortedTimeline = timelineCounts.sorted {
+        if $0.key.year == $1.key.year {
+            return $0.key.month ?? 0 < $1.key.month ?? 0
+        }
+        return $0.key.year ?? 0 < $1.key.year ?? 0
+    }
+
+    // Print the timeline in the desired format
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "MMM"
+
+    for (components, count) in sortedTimeline {
+        if let year = components.year, let month = components.month {
+            let monthName = dateFormatter.monthSymbols[month - 1] // Get month name
+            print("\(year) – \(monthName) – \(count)")
+        }
+    }
+}
+
+
 // 0
 func filterDuplicates(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
     var uniqueDates = Set<Date>()
+    var uniqueFilenames = Set<String>()
     var filteredAssets = [PHAsset]()
 
     assets.enumerateObjects { (asset, _, _) in
-        if let creationDate = asset.creationDate, !uniqueDates.contains(creationDate) {
-            uniqueDates.insert(creationDate)
-            filteredAssets.append(asset)
+        guard let filename = asset.value(forKey: "filename") as? String else {
+            return
+        }
+
+        // If there's no time component or if the date is unique, proceed
+        if asset.hasDefaultTime || !uniqueDates.contains(asset.customDate) {
+            // Check if the filename is unique
+            if !uniqueFilenames.contains(filename) {
+                uniqueDates.insert(asset.customDate)
+                uniqueFilenames.insert(filename)
+                filteredAssets.append(asset)
+            }
         }
     }
     return filteredAssets
+}
+
+func restrictToTimeFrame(assets: [PHAsset]) -> [PHAsset] {
+    return assets.filter { !$0.hasDefaultTime }
 }
 
 
@@ -85,22 +180,34 @@ func groupPortraits(assets: [PHAsset]) -> [[PHAsset]] {
 
 // 2.2
 func sortAssetsByDate(assets: [PHAsset]) -> [PHAsset] {
-    return assets.sorted { $0.creationDate ?? Date.distantPast < $1.creationDate ?? Date.distantPast }
-}
+    let calendar = Calendar.current
+    let currentMonth = calendar.component(.month, from: Date())
 
+    // Define acceptable months (previous, current, and next)
+    let previousMonth = currentMonth == 1 ? 12 : currentMonth - 1
+    let nextMonth = currentMonth == 12 ? 1 : currentMonth + 1
+    let validMonths = [previousMonth, currentMonth, nextMonth]
+    
+    // Filter assets to only include those within ±1 month of the current month
+    let filteredAssets = assets.filter {
+        let assetMonth = calendar.component(.month, from: $0.customDate)
+        return validMonths.contains(assetMonth)
+    }
+    
+    // Sort the filtered assets by customDate
+    return filteredAssets.sorted { $0.customDate < $1.customDate }
+}
 
 //2.3
 func isWithinTimeFrame(_ asset1: PHAsset, _ asset2: PHAsset, minutes: Int) -> Bool {
-    guard let date1 = asset1.creationDate, let date2 = asset2.creationDate else { return false }
-    return abs(date1.timeIntervalSince(date2)) <= Double(minutes * 60)
+    return abs(asset1.customDate.timeIntervalSince(asset2.customDate)) <= Double(minutes * 60)
 }
 
 
 //2.4
 func isSameDay(_ asset1: PHAsset, _ asset2: PHAsset) -> Bool {
     let calendar = Calendar.current
-    guard let date1 = asset1.creationDate, let date2 = asset2.creationDate else { return false }
-    return calendar.isDate(date1, inSameDayAs: date2)
+    return calendar.isDate(asset1.customDate, inSameDayAs: asset2.customDate)
 }
 
 //3.1

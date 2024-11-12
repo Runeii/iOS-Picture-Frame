@@ -18,7 +18,7 @@ struct ContentView: View {
     @State private var nextRightImage: UIImage? = nil
     @State private var fadeProgress: Double = 1.0
     
-    @State private var locationName: String = "Loading..."
+    @State private var locationName: String? = nil
     
     var body: some View {
         ZStack {
@@ -53,19 +53,24 @@ struct ContentView: View {
                     .clipped()
                     .opacity(1.0 - fadeProgress)
             }
-            if let currentLeftImage = currentLeftImage {
+            if currentLeftImage != nil {
                 VStack(alignment: .leading) {
                     Spacer()
-                    Text("Slide \(displayImageIndex + 1) of \(photoAssets.count)")
-                        .padding(.bottom, 2)
-                    Text("Date taken: \(formatDate(photoAssets[currentImageIndex].creationDate))")
-                        .padding(.bottom, 2)
-                    Text("Location: \(locationName)")
-                        .onAppear() { updatePlace() }
-                        .onChange(of: currentImageIndex) { index in
+                    if let formattedDate = formatDate(photoAssets[currentImageIndex].customDate, currentRightImage != nil ? photoAssets[currentImageIndex + 1].customDate : nil) {
+                        Text(formattedDate)
+                            .padding(.bottom, 2)
+                    }
+                    if locationName != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mappin.and.ellipse") // Location marker icon
+                            Text(locationName!)
+                        }.onAppear {
+                            updatePlace()
+                        }.onChange(of: currentImageIndex) { _ in
                             updatePlace()
                         }
-                }.font(.caption) // Customize the font as needed
+                    }
+                }.font(.body) // Customize the font as needed
                     .opacity(isUserTouching ? 1.0 : 0.0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding([.leading, .bottom], 16)
@@ -167,24 +172,30 @@ struct ContentView: View {
             .frame(width: width, height: UIScreen.main.bounds.height, alignment: .center)
             .clipped()
     }
-    
-    func formatDate(_ date: Date?) -> String {
-        guard let date = date else { return "Unknown" }
+
+    func formatDate(_ date1: Date, _ date2: Date? = nil) -> String? {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        formatter.timeStyle = .none
+        
+        // If date2 is nil or if date1 and date2 are the same, return the formatted single date
+        if date2 == nil || date1 == date2 {
+            return formatter.string(from: date1)
+        }
+        
+        // If date1 and date2 are different, format and return "date1 / date2"
+        return "\(formatter.string(from: date1)) / \(formatter.string(from: date2!))"
     }
 
     func updatePlace() {
         guard let location = self.photoAssets[self.currentImageIndex].location else {
-            self.locationName = "No location"
+            self.locationName = nil
             return
         }
         let geocoder = CLGeocoder()
         geocoder.reverseGeocodeLocation(location) { placemarks, error in
             guard let place = placemarks?.first, error == nil else {
-                self.locationName = "Unknown"
+                self.locationName = nil
                 return
             }
             
@@ -203,7 +214,7 @@ struct ContentView: View {
                 placeName += ", \(country)"
             }
             
-            self.locationName = placeName.isEmpty ? "Unknown" : placeName
+            self.locationName = placeName.isEmpty ? nil : placeName
         }
     }
 

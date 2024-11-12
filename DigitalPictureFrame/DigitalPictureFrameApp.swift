@@ -42,9 +42,6 @@ struct DigitalPictureFrameApp: App {
                 )
                 .transition(.opacity)  // Apply fading transition between slides
                 .edgesIgnoringSafeArea(.all)  // Extend content to the screen edges
-                if isUserTouching {
-                    DebugLogView(debugLog: debugLog, appStartTime: appStartTime)
-                }
             }
             .statusBar(hidden: true)
             .onAppear {
@@ -196,7 +193,7 @@ struct DigitalPictureFrameApp: App {
         // Invalidate any previous timer
         slideTimer?.invalidate()
         
-        slideTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { _ in
+        slideTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: false) { _ in
             jumpToNextSlide()
         }
 
