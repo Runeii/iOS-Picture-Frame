@@ -8,6 +8,36 @@
 import Foundation
 import Photos
 
+// Cache for filenames, indexed by asset's localIdentifier
+var filenameCache = [String: String]()
+
+func fetchFilenames(for assets: PHFetchResult<PHAsset>, completion: @escaping ([String?]) -> Void) {
+    var filenames = Array<String?>(repeating: nil, count: assets.count)
+    let dispatchGroup = DispatchGroup()
+    let semaphore = DispatchSemaphore(value: 10) // Limit to 10 concurrent tasks
+
+    for i in 0..<assets.count {
+        dispatchGroup.enter()
+        semaphore.wait() // Wait if limit is reached
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let asset = assets.object(at: i)
+            let resources = PHAssetResource.assetResources(for: asset)
+            let filename = resources.first?.originalFilename
+            filenames[i] = filename
+            if let filename = filename {
+                filenameCache[asset.localIdentifier] = filename // Store in cache
+            }
+            semaphore.signal() // Signal to allow next task
+            dispatchGroup.leave()
+        }
+    }
+
+    dispatchGroup.notify(queue: .main) {
+        completion(filenames)
+    }
+}
+
 extension PHAsset {
     // Computed property that attempts to extract a custom date from the filename or falls back to creationDate
     var customDate: Date {
@@ -18,10 +48,9 @@ extension PHAsset {
         }
     }
     
-    // Helper to retrieve the filename of the asset
+    // Access the cached filename if available
     var filename: String? {
-        let resources = PHAssetResource.assetResources(for: self)
-        return resources.first?.originalFilename
+        filenameCache[self.localIdentifier]
     }
     
     // Helper function to extract date from filename in YYYYMMDD format
@@ -50,6 +79,17 @@ extension PHAsset {
 }
 
 func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
+    let dispatchGroup = DispatchGroup()
+    dispatchGroup.enter() // Enter the group
+
+    let assetsArray = (0..<assets.count).map { assets.object(at: $0) }
+
+    fetchFilenames(for: assets) {_ in
+        dispatchGroup.leave() // Leave the group once fetching is done
+    }
+
+    dispatchGroup.wait()
+
     let filteredAssets = filterDuplicates(assets: assets)
     let timeframedAssets = restrictToTimeFrame(assets: filteredAssets)
 

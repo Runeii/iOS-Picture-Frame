@@ -7,9 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		4935230A2C95C61A005022EC /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 493523092C95C61A005022EC /* DebugLog.swift */; };
-		494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */; };
-		494FEC1B2C8EF4DC009A2031 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC1A2C8EF4DC009A2031 /* ContentView.swift */; };
+		4908671B2CE3BAF5002C2A26 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4908671A2CE3BAF5002C2A26 /* AppDelegate.swift */; };
+		494FEC192C8EF4DC009A2031 /* DigitalPictureFrameViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC182C8EF4DC009A2031 /* DigitalPictureFrameViewController.swift */; };
 		494FEC1D2C8EF4DD009A2031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 494FEC1C2C8EF4DD009A2031 /* Assets.xcassets */; };
 		494FEC202C8EF4DD009A2031 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 494FEC1F2C8EF4DD009A2031 /* Preview Assets.xcassets */; };
 		496CAC882C8FFF820059E50C /* LightMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496CAC872C8FFF820059E50C /* LightMonitor.swift */; };
@@ -19,10 +18,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		493523092C95C61A005022EC /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
+		4908671A2CE3BAF5002C2A26 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		494FEC152C8EF4DC009A2031 /* DigitalPictureFrame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DigitalPictureFrame.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalPictureFrameApp.swift; sourceTree = "<group>"; };
-		494FEC1A2C8EF4DC009A2031 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		494FEC182C8EF4DC009A2031 /* DigitalPictureFrameViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalPictureFrameViewController.swift; sourceTree = "<group>"; };
 		494FEC1C2C8EF4DD009A2031 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		494FEC1F2C8EF4DD009A2031 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		496CAC872C8FFF820059E50C /* LightMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightMonitor.swift; sourceTree = "<group>"; };
@@ -62,16 +60,15 @@
 		494FEC172C8EF4DC009A2031 /* DigitalPictureFrame */ = {
 			isa = PBXGroup;
 			children = (
+				4908671A2CE3BAF5002C2A26 /* AppDelegate.swift */,
 				496CAC892C9000FE0059E50C /* PowerSavingManager.swift */,
 				49BD4D552C8F64D800D1E8A1 /* Info.plist */,
-				494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */,
-				494FEC1A2C8EF4DC009A2031 /* ContentView.swift */,
+				494FEC182C8EF4DC009A2031 /* DigitalPictureFrameViewController.swift */,
 				494FEC1C2C8EF4DD009A2031 /* Assets.xcassets */,
 				494FEC1E2C8EF4DD009A2031 /* Preview Content */,
 				496CAC872C8FFF820059E50C /* LightMonitor.swift */,
 				49EC2FF62C9021F90066436E /* AssetSorting.swift */,
 				49FF01ED2C9157BC0066F8F9 /* StorageManager.swift */,
-				493523092C95C61A005022EC /* DebugLog.swift */,
 			);
 			path = DigitalPictureFrame;
 			sourceTree = "<group>";
@@ -154,10 +151,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4908671B2CE3BAF5002C2A26 /* AppDelegate.swift in Sources */,
 				49EC2FF72C9021F90066436E /* AssetSorting.swift in Sources */,
-				494FEC1B2C8EF4DC009A2031 /* ContentView.swift in Sources */,
-				4935230A2C95C61A005022EC /* DebugLog.swift in Sources */,
-				494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */,
+				494FEC192C8EF4DC009A2031 /* DigitalPictureFrameViewController.swift in Sources */,
 				49FF01EE2C9157BC0066F8F9 /* StorageManager.swift in Sources */,
 				496CAC882C8FFF820059E50C /* LightMonitor.swift in Sources */,
 				496CAC8A2C9000FE0059E50C /* PowerSavingManager.swift in Sources */,
@@ -294,7 +290,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DigitalPictureFrame/Preview Content\"";
-				DEVELOPMENT_TEAM = XT5PQQV954;
+				DEVELOPMENT_TEAM = JU56H8W746;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DigitalPictureFrame/Info.plist;
@@ -332,7 +328,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"DigitalPictureFrame/Preview Content\"";
-				DEVELOPMENT_TEAM = XT5PQQV954;
+				DEVELOPMENT_TEAM = JU56H8W746;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = DigitalPictureFrame/Info.plist;
