@@ -228,6 +228,10 @@ func sortAssetsByDate(assets: [PHAsset]) -> [PHAsset] {
     let nextMonth = currentMonth == 12 ? 1 : currentMonth + 1
     let validMonths = [previousMonth, currentMonth, nextMonth]
     
+    if !UserDefaults.standard.bool(forKey: "filter_seasonal_photos") {
+        return assets
+    }
+
     // Filter assets to only include those within ±1 month of the current month
     let filteredAssets = assets.filter {
         let assetMonth = calendar.component(.month, from: $0.customDate)

@@ -11,16 +11,10 @@ class DigitalPictureFrameViewController: UIViewController {
     private var hasStarted: Bool = false
     private var photoAssets: [PHAsset] = []
 
-    private var isLowPowerModeEnabled: Bool = false
     private var isUserTouching: Bool = false
 
-    private var debugLog: [String] = []
-    private var initialMemoryUsage: String? = nil
-
-    private var hourlyFetchTimer: Timer? = nil
+    private var regularFetchTimer: Timer? = nil
     private var slideTimer: Timer? = nil
-
-    private var lightMonitor: LightMonitor?
 
     private var imageViewLeft: UIImageView!
     private var imageViewRight: UIImageView!
@@ -38,15 +32,22 @@ class DigitalPictureFrameViewController: UIViewController {
 
     private var locationName: String? = nil
 
+    override var prefersStatusBarHidden: Bool {
+        return true
+    }
+
+    override var childForStatusBarHidden: UIViewController? {
+        return nil
+    }
     override func viewDidLoad() {
         super.viewDidLoad()
+        self.modalPresentationStyle = .fullScreen
 
         appStartTime = Date()
         setupViews()
-        requestPhotoLibraryPermission()
+
         keepScreenOn()
-        scheduleHourlyPhotoFetch()
-        handleLowPowerMode()
+        scheduleRegularPhotoFetch()
 
         setupLoadingLabel()
         showLoadingLabel()
@@ -56,7 +57,7 @@ class DigitalPictureFrameViewController: UIViewController {
         longPressGesture.minimumPressDuration = 0.1
         view.addGestureRecognizer(longPressGesture)
     }
-
+    
     func setupLoadingLabel() {
         loadingLabel = UILabel()
         loadingLabel.text = "Grouping images...."
@@ -73,102 +74,69 @@ class DigitalPictureFrameViewController: UIViewController {
     }
 
     func showLoadingLabel() {
-        loadingLabel.isHidden = false
+        DispatchQueue.main.async {
+            self.loadingLabel.isHidden = false
+        }
     }
 
     func hideLoadingLabel() {
-        loadingLabel.isHidden = true
-    }
-
-    func debug(_ text: String) {
-        debugLog.append("\(Date().string(format: "HH:mm:ss")) – \(text)")
-
-        if debugLog.count > 20 {
-            debugLog.removeFirst(debugLog.count - 20)
+        DispatchQueue.main.async {
+            self.loadingLabel.isHidden = true
         }
     }
 
-    func getMemoryUsage() -> String {
-        var taskInfo = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout.size(ofValue: taskInfo)) / 4
-
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &taskInfo) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+    func scheduleRegularPhotoFetch() {
+        print("Scheduling regular photo fetch")
+        self.regularFetchTimer?.invalidate()
+        print(UserDefaults.standard.integer(forKey: "check_duration"), UserDefaults.standard.double(forKey: "check_duration"))
+        self.regularFetchTimer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: "check_duration"), repeats: true) { _ in
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.fetchPhotosFromAlbum()
             }
         }
-
-        if kerr == KERN_SUCCESS {
-            let usedMB = taskInfo.resident_size / 1024 / 1024
-            return "\(usedMB) MB"
-        } else {
-            let errorString = String(cString: mach_error_string(kerr), encoding: .ascii) ?? "Unknown error"
-            return "Error: \(errorString)"
-        }
-    }
-
-    func requestPhotoLibraryPermission() {
-        PHPhotoLibrary.requestAuthorization { status in
-            switch status {
-            case .authorized:
-                self.fetchPhotosFromAlbum(albumName: "Picture Frame")
-            default:
-                print("Denied access to photos.")
-            }
-        }
-    }
-
-    func scheduleHourlyPhotoFetch() {
-        debug("Scheduling hourly photo fetch")
-        self.hourlyFetchTimer?.invalidate()
-        self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { _ in
-            self.debug("Timer fired: fetch photo updates")
-            if !self.isLowPowerModeEnabled {
-                self.fetchPhotosFromAlbum(albumName: "Picture Frame")
-            }
-        }
-        RunLoop.main.add(self.hourlyFetchTimer!, forMode: .common)
+        RunLoop.main.add(self.regularFetchTimer!, forMode: .common)
     }
 
     func keepScreenOn() {
         UIApplication.shared.isIdleTimerDisabled = true
     }
 
-    func fetchPhotosFromAlbum(albumName: String) {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.predicate = NSPredicate(format: "title = %@", albumName)
-        fetchOptions.fetchLimit = 0
-
-        let collectionResult: PHFetchResult<PHAssetCollection> = PHAssetCollection.fetchAssetCollections(
-            with: .album,
-            subtype: .any,
-            options: fetchOptions
-        )
-
-        guard let album = collectionResult.firstObject else {
-            print("Album not found")
+    func fetchPhotosFromAlbum() {
+        // Retrieve the saved album's localIdentifier
+        guard let albumIdentifier = FolderSelectionManager.loadSelectedFolder() else {
+            print("No album selected in UserDefaults.")
             return
         }
 
+        // Fetch the album using its localIdentifier
+        let fetchOptions = PHFetchOptions()
+        let albumFetchResult: PHFetchResult<PHAssetCollection> = PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [albumIdentifier],
+            options: fetchOptions
+        )
+
+        guard let album = albumFetchResult.firstObject else {
+            print("No album found for the saved identifier.")
+            return
+        }
+
+        // Fetch all assets in the album
         let assetFetchOptions = PHFetchOptions()
         assetFetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-        assetFetchOptions.fetchLimit = 0
-
-        let result: PHFetchResult<PHAsset> = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
-
-        let formattedResult = processAssets(assets: result)
-
+        let assetsFetchResult: PHFetchResult<PHAsset> = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
+        
+        print("Fetched \(assetsFetchResult.count) photos from album.")
+        let formattedResult = processAssets(assets: assetsFetchResult)
+        
+        print("\(formattedResult.count - photoAssets.count) new photos found")
+    
         if formattedResult.count != photoAssets.count {
-            print("\(formattedResult.count - photoAssets.count) new photos found")
-
+            slideTimer?.invalidate()
             self.photoAssets = formattedResult
             self.currentImageIndex = 0
-
-            if !hasStarted && !isLowPowerModeEnabled {
-                hasStarted = true
-                DispatchQueue.main.async {
-                    self.jumpToNextSlide()
-                }
+            print("resetting to 0")
+            DispatchQueue.main.async {
+                self.jumpToNextSlide()
             }
         }
         
@@ -178,6 +146,7 @@ class DigitalPictureFrameViewController: UIViewController {
     func jumpToNextSlide() {
         guard !self.photoAssets.isEmpty else { return }
 
+        
         let currentAsset = self.photoAssets[self.currentImageIndex]
         let increment: Int
         if currentAsset.pixelWidth > currentAsset.pixelHeight {
@@ -189,40 +158,19 @@ class DigitalPictureFrameViewController: UIViewController {
         let nextSlideIndex = (self.currentImageIndex + increment) % self.photoAssets.count
         self.currentImageIndex = nextSlideIndex
 
-        debug("Next slide: \(self.currentImageIndex)")
-
-        let memoryUsage = self.getMemoryUsage()
-        if initialMemoryUsage == nil {
-            self.initialMemoryUsage = memoryUsage
-        }
-        debug("Current memory usage: \(memoryUsage). \(self.initialMemoryUsage ?? "") at init")
+        print("Next slide: \(self.currentImageIndex)")
 
         loadImages(for: currentImageIndex)
     }
 
     func startNextSlideTimer() {
-        guard !isLowPowerModeEnabled else {
-            return
-        }
-
         // Invalidate any previous timer
         slideTimer?.invalidate()
-
-        slideTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in
+        print("Start next slide timer")
+        slideTimer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: "slide_duration"), repeats: false) { _ in
             self.jumpToNextSlide()
         }
         RunLoop.main.add(slideTimer!, forMode: .common)
-    }
-
-    func handleLowPowerMode() {
-        self.lightMonitor = LightMonitor()
-        self.lightMonitor?.startLightMonitor(onPowerModeChanged: { isLowPower in
-            self.debug("Light monitor update. isLowPower: \(isLowPower)")
-            self.isLowPowerModeEnabled = isLowPower
-            if !isLowPower {
-                self.fetchPhotosFromAlbum(albumName: "Picture Frame")
-            }
-        }, onDebug: self.debug)
     }
 
     func setupViews() {
@@ -261,9 +209,17 @@ class DigitalPictureFrameViewController: UIViewController {
             locationLabel.leadingAnchor.constraint(equalTo: safeArea.leadingAnchor, constant: 16),
             locationLabel.bottomAnchor.constraint(equalTo: dateLabel.topAnchor, constant: -8)
         ])
+        
+        if UserDefaults.standard.bool(forKey: "always_show_labels") {
+            dateLabel.alpha = 1.0
+            locationLabel.alpha = 1.0
+        }
     }
 
     @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        if UserDefaults.standard.bool(forKey: "always_show_labels") {
+            return
+        }
         if gesture.state == .began {
             self.isUserTouching = true
             // Show labels
@@ -337,7 +293,7 @@ class DigitalPictureFrameViewController: UIViewController {
         view.addSubview(incomingImageViewRight!)
 
         // Animate the crossfade without changing frames
-        UIView.animate(withDuration: 1.0, animations: {
+        UIView.animate(withDuration: UserDefaults.standard.double(forKey: "fade_duration"), animations: {
             self.incomingImageViewLeft?.alpha = 1.0
             self.incomingImageViewRight?.alpha = 1.0
         }, completion: { _ in
