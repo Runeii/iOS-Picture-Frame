@@ -30,11 +30,18 @@ class StorageManager {
     }
 
     private func loadStorage() {
+        if !FileManager.default.fileExists(atPath: storageURL.path) {
+            storage = [:]
+            saveStorage()
+            return
+        }
+        
         do {
             let data = try Data(contentsOf: storageURL)
             storage = try JSONDecoder().decode([String: Date].self, from: data)
         } catch {
             print("Error loading storage: \(error)")
+            storage = [:]
         }
     }
 

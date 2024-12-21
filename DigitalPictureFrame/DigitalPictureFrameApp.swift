@@ -11,13 +11,17 @@ extension Date {
 
 @main
 struct DigitalPictureFrameApp: App {
+    @State private var hasPermission: Bool = false
+
+    @State private var selectedAlbum: PHAssetCollection?
+    @State private var showingAlbumSelector = true
+
     @State private var appStartTime: Date = Date()
 
     @State private var currentImageIndex: Int = -1
     @State private var hasStarted: Bool = false
     @State private var photoAssets: [PHAsset] = []
 
-    @State private var isLowPowerModeEnabled: Bool = false
     @State private var isUserTouching: Bool = false
 
     @State private var debugLog: [String] = []
@@ -31,68 +35,65 @@ struct DigitalPictureFrameApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                // Single ContentView to handle image display with fade transition
-                ContentView(
-                    photoAssets: $photoAssets,
-                    currentImageIndex: $currentImageIndex,
-                    isUserTouching: $isUserTouching,
-                    onSlideDisplayed: { index in
-                        self.startNextSlideTimer()
-                    }
-                )
-                .transition(.opacity)  // Apply fading transition between slides
-                .edgesIgnoringSafeArea(.all)  // Extend content to the screen edges
+                if let album = selectedAlbum {
+                    ContentView(
+                        photoAssets: $photoAssets,
+                        currentImageIndex: $currentImageIndex,
+                        isUserTouching: $isUserTouching,
+                        onSlideDisplayed: { index in
+                            self.startNextSlideTimer()
+                        }
+                    )
+                    .edgesIgnoringSafeArea(.all)
+                    .onLongPressGesture(minimumDuration: .infinity, pressing: { isTouching in
+                        self.isUserTouching = isTouching
+
+                        if isTouching {
+                            slideTimer?.invalidate()
+                        } else {
+                            self.startNextSlideTimer()
+                        }
+                    }, perform: {})
+                } else if (hasPermission) {
+                    AlbumSelectionView(selectedAlbum: $selectedAlbum)
+                }
             }
             .statusBar(hidden: true)
             .onAppear {
-                appStartTime = Date() 
+                clearFolderIfRequired()
+                registerUserDefaults()
                 requestPhotoLibraryPermission()
+
+                // Try to restore previously selected album
+                if let savedAlbumId = UserDefaults.standard.string(forKey: "selectedAlbumId") {
+                    let options = PHFetchOptions()
+                    let result = PHAssetCollection.fetchAssetCollections(
+                        withLocalIdentifiers: [savedAlbumId],
+                        options: options
+                    )
+                    selectedAlbum = result.firstObject
+                }
+
+                appStartTime = Date()
                 keepScreenOn()
                 scheduleHourlyPhotoFetch()
-                handleLowPowerMode()
             }
-            .onChange(of: photoAssets) { _ in
-                if !hasStarted && !isLowPowerModeEnabled {
-                    hasStarted = true
-                    self.startNextSlideTimer()
-                }
+            .onChange(of: selectedAlbum) { album in
+                fetchPhotosFromAlbum()
             }
-            .onLongPressGesture(minimumDuration: .infinity, pressing: { isTouching in
-                self.isUserTouching = isTouching
-
-                if isTouching {
-                    slideTimer?.invalidate()
-                } else {
-                    self.startNextSlideTimer()
-                }
-            }, perform: {})
         }
     }
     
-    func debug(_ text: String) {
-        debugLog.append("\(Date().string(format: "HH:mm:ss")) – \(text)")
-        
-        if debugLog.count > 20 {
-            debugLog.removeFirst(debugLog.count - 20)
-        }
-    }
-
-    func getMemoryUsage() -> String {
-        var taskInfo = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout.size(ofValue: taskInfo)) / 4
-
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &taskInfo) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
-
-        if kerr == KERN_SUCCESS {
-            let usedMB = taskInfo.resident_size / 1024 / 1024
-            return "\(usedMB) MB"
-        } else {
-            let errorString = String(cString: mach_error_string(kerr), encoding: .ascii) ?? "Unknown error"
-            return "Error: \(errorString)"
+    func clearFolderIfRequired() {
+        let resetKey = "reset_selected_folder"
+        if UserDefaults.standard.bool(forKey: resetKey) {
+            // Reset the selected folder
+            UserDefaults.standard.removeObject(forKey: "selectedAlbumId")
+            
+            // Reset the toggle to off (so it doesn't reset repeatedly)
+            UserDefaults.standard.set(false, forKey: resetKey)
+            
+            print("Selected folder identifier reset.")
         }
     }
 
@@ -101,7 +102,8 @@ struct DigitalPictureFrameApp: App {
         PHPhotoLibrary.requestAuthorization { status in
             switch status {
             case .authorized, .limited:
-                fetchPhotosFromAlbum(albumName: "Picture Frame")
+                self.hasPermission = true
+                return
             case .denied, .restricted:
                 print("Denied access to photos.")
             case .notDetermined:
@@ -114,47 +116,60 @@ struct DigitalPictureFrameApp: App {
 
     // Schedule hourly refresh of the album to fetch new photos
     func scheduleHourlyPhotoFetch() {
-        debug("Scheduling hourly photo fetch")
+        print("Scheduling hourly photo fetch")
         self.hourlyFetchTimer?.invalidate()
-        self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) { _ in
-            debug("Timer fired: fetch photo updates")
-            if !self.isLowPowerModeEnabled {
-                fetchPhotosFromAlbum(albumName: "Picture Frame")
-            }
+        self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: "check_duration"), repeats: true) { _ in
+            print("Timer fired: fetch photo updates")
+            fetchPhotosFromAlbum()
         }
         RunLoop.main.add(self.hourlyFetchTimer!, forMode: .common)
     }
 
+    func registerUserDefaults() {
+        if let settingsBundle = Bundle.main.url(forResource: "Settings", withExtension: "bundle"),
+           let settings = NSDictionary(contentsOf: settingsBundle.appendingPathComponent("Root.plist")),
+           let preferences = settings["PreferenceSpecifiers"] as? [[String: Any]] {
+            
+            for preference in preferences {
+                if let key = preference["Key"] as? String,
+                   let defaultValue = preference["DefaultValue"],
+                   UserDefaults.standard.object(forKey: key) == nil {
+                    UserDefaults.standard.set(defaultValue, forKey: key)
+                }
+            }
+        }
+    }
     // Prevent screen from turning off
     func keepScreenOn() {
         UIApplication.shared.isIdleTimerDisabled = true
     }
 
-    // Fetch photos from the album and shuffle them
-    func fetchPhotosFromAlbum(albumName: String) {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.predicate = NSPredicate(format: "title = %@", albumName)
-        fetchOptions.fetchLimit = 0
-
-        let collectionResult: PHFetchResult<PHAssetCollection> = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: fetchOptions)
-
-        guard let album = collectionResult.firstObject else {
-            print("Album not found")
+    func fetchPhotosFromAlbum() {
+        guard let album = selectedAlbum else {
             return
         }
-
-        let assetFetchOptions = PHFetchOptions()
-        assetFetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-        assetFetchOptions.fetchLimit = 0
-
-        let result: PHFetchResult<PHAsset> = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
-        let formattedResult = processAssets(assets: result)
         
-        if (formattedResult.count != photoAssets.count) {
-            debug("\(formattedResult.count - photoAssets.count) new photos found")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let assetFetchOptions = PHFetchOptions()
+            assetFetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+            assetFetchOptions.fetchLimit = 0
 
-            self.photoAssets = formattedResult
-            self.currentImageIndex = 0
+            let result = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
+            
+            print("Found \(result.count) photos")
+            let formattedResult = processAssets(assets: result)
+            
+            print("Formatted \(formattedResult.count) photos")
+            
+            DispatchQueue.main.async {
+                if (formattedResult.count != self.photoAssets.count) {
+                    print("\(formattedResult.count - (self.photoAssets.count ?? 0)) new photos found")
+                    
+                    self.photoAssets = formattedResult
+                    self.currentImageIndex = 0
+                    self.jumpToNextSlide()
+                }
+            }
         }
     }
 
@@ -170,45 +185,23 @@ struct DigitalPictureFrameApp: App {
         }
         
         let nextSlideIndex = (self.currentImageIndex + increment) % self.photoAssets.count
-        self.currentImageIndex = nextSlideIndex
+        print("Next slide: \(self.currentImageIndex) -> \(nextSlideIndex)")
 
-        debug("Next slide: \(self.currentImageIndex) -> \(nextSlideIndex)")
-        
-        let memoryUsage = self.getMemoryUsage()
-        if (initialMemoryUsage == nil) {
-            self.initialMemoryUsage = memoryUsage
-        }
-        debug("Current memory usage: \(memoryUsage). \(self.initialMemoryUsage) at init")
+        self.currentImageIndex = nextSlideIndex
     }
 
     // Start a timer for the next slide
     func startNextSlideTimer() {
-        guard !isLowPowerModeEnabled else {
-            return
-        }
-        
         let assetManager = StorageManager.shared
         assetManager.storeOrUpdateAssetSeenTime(assetId: photoAssets[currentImageIndex].localIdentifier)
 
         // Invalidate any previous timer
         slideTimer?.invalidate()
         
-        slideTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: false) { _ in
+        slideTimer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: "slide_duration"), repeats: false) { _ in
             jumpToNextSlide()
         }
 
         RunLoop.main.add(slideTimer!, forMode: .common)
-    }
-
-    
-    func handleLowPowerMode() {
-        self.lightMonitor = LightMonitor()
-        self.lightMonitor?.startLightMonitor(onPowerModeChanged: { isLowPower in
-            debug("Light monitor update. isLowPower: \(isLowPower)")
-            self.isLowPowerModeEnabled = isLowPower
-            if !isLowPower {
-                fetchPhotosFromAlbum(albumName: "Picture Frame")
-            }
-        }, onDebug: debug)
     }
 }

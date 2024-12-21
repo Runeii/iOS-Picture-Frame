@@ -71,14 +71,16 @@ struct ContentView: View {
                         }
                     }
                 }.font(.body) // Customize the font as needed
-                    .opacity(isUserTouching ? 1.0 : 0.0)
+                    .opacity(isUserTouching || UserDefaults.standard.bool(forKey: "always_show_labels") ? 1.0 : 0.0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding([.leading, .bottom], 16)
             }
         }
         .onAppear {
+            print("currentImageIndex", currentImageIndex)
             displayImageIndex = currentImageIndex // Initialize display index
             if displayImageIndex >= 0 {
+                print("displayImageIndex", displayImageIndex)
                 loadImages(for: displayImageIndex)
             }
         }
@@ -93,12 +95,12 @@ struct ContentView: View {
     func crossfadeToNewImage(for newIndex: Int) {
         loadImages(for: newIndex) { // Load new images (both portrait and landscape cases)
             // Start crossfade animation
-            withAnimation(.easeInOut(duration: 1.0)) {
+            withAnimation(.easeInOut(duration: UserDefaults.standard.double(forKey: "fade_duration"))) {
                 self.fadeProgress = 0.0 // Crossfade from current to next images
             }
             
             // After the crossfade is complete, switch images
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + UserDefaults.standard.double(forKey: "fade_duration")) {
                 self.currentLeftImage = self.nextLeftImage // Update current left image
                 self.currentRightImage = self.nextRightImage // Update current right image (for portrait mode)
                 self.nextLeftImage = nil

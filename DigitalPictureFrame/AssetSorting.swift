@@ -51,6 +51,7 @@ extension PHAsset {
 
 func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
     let filteredAssets = filterDuplicates(assets: assets)
+
     let timeframedAssets = restrictToTimeFrame(assets: filteredAssets)
 
     // Step 1: Separate into landscape and portrait
@@ -62,6 +63,7 @@ func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
     // Step 3: Shuffle portrait pairs and landscapes with bias
     let biasedPortraitPairs = biasAssets(assets: portraitPairs)
     let biasedLandscapes = biasAssets(assets: landscape.map { [$0] }).flatMap { $0 }
+
     // Step 4: Interleave the biased portrait pairs and landscapes
     return interleavePortraitsAndLandscapes(portraits: biasedPortraitPairs, landscapes: biasedLandscapes)
 }
@@ -116,7 +118,7 @@ func filterDuplicates(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
         guard let filename = asset.value(forKey: "filename") as? String else {
             return
         }
-
+        
         // If there's no time component or if the date is unique, proceed
         if asset.hasDefaultTime || !uniqueDates.contains(asset.customDate) {
             // Check if the filename is unique
@@ -187,6 +189,10 @@ func sortAssetsByDate(assets: [PHAsset]) -> [PHAsset] {
     let previousMonth = currentMonth == 1 ? 12 : currentMonth - 1
     let nextMonth = currentMonth == 12 ? 1 : currentMonth + 1
     let validMonths = [previousMonth, currentMonth, nextMonth]
+    
+    if !UserDefaults.standard.bool(forKey: "filter_seasonal_photos") {
+        return assets
+    }
     
     // Filter assets to only include those within ±1 month of the current month
     let filteredAssets = assets.filter {
