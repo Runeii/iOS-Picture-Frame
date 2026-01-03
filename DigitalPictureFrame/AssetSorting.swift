@@ -133,7 +133,24 @@ func filterDuplicates(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
 }
 
 func restrictToTimeFrame(assets: [PHAsset]) -> [PHAsset] {
-    return assets.filter { !$0.hasDefaultTime }
+    // If seasonal filtering is disabled, return all assets
+    if !UserDefaults.standard.bool(forKey: "filter_seasonal_photos") {
+        return assets
+    }
+    
+    let calendar = Calendar.current
+    let currentMonth = calendar.component(.month, from: Date())
+
+    // Define acceptable months (previous, current, and next)
+    let previousMonth = currentMonth == 1 ? 12 : currentMonth - 1
+    let nextMonth = currentMonth == 12 ? 1 : currentMonth + 1
+    let validMonths = [previousMonth, currentMonth, nextMonth]
+    
+    // Filter assets to only include those within ±1 month of the current month
+    return assets.filter {
+        let assetMonth = calendar.component(.month, from: $0.customDate)
+        return validMonths.contains(assetMonth)
+    }
 }
 
 
@@ -182,26 +199,8 @@ func groupPortraits(assets: [PHAsset]) -> [[PHAsset]] {
 
 // 2.2
 func sortAssetsByDate(assets: [PHAsset]) -> [PHAsset] {
-    let calendar = Calendar.current
-    let currentMonth = calendar.component(.month, from: Date())
-
-    // Define acceptable months (previous, current, and next)
-    let previousMonth = currentMonth == 1 ? 12 : currentMonth - 1
-    let nextMonth = currentMonth == 12 ? 1 : currentMonth + 1
-    let validMonths = [previousMonth, currentMonth, nextMonth]
-    
-    if !UserDefaults.standard.bool(forKey: "filter_seasonal_photos") {
-        return assets
-    }
-    
-    // Filter assets to only include those within ±1 month of the current month
-    let filteredAssets = assets.filter {
-        let assetMonth = calendar.component(.month, from: $0.customDate)
-        return validMonths.contains(assetMonth)
-    }
-    
-    // Sort the filtered assets by customDate
-    return filteredAssets.sorted { $0.customDate < $1.customDate }
+    // Always sort by customDate
+    return assets.sorted { $0.customDate < $1.customDate }
 }
 
 //2.3
@@ -219,11 +218,7 @@ func isSameDay(_ asset1: PHAsset, _ asset2: PHAsset) -> Bool {
 //3.1
 func biasAssets(assets: [[PHAsset]]) -> [[PHAsset]] {
     let recencyBiasStrength: Double = 0.8
-    let seasonBiasStrength: Double = 0.5
     
-    let currentMonth = Calendar.current.component(.month, from: Date())
-    let currentYear = Calendar.current.component(.year, from: Date())
-
     // Categorize assets based on whether they have been seen before
     var neverSeenAssets: [[PHAsset]] = []
     var seenAssets: [[PHAsset]] = []
@@ -239,22 +234,16 @@ func biasAssets(assets: [[PHAsset]]) -> [[PHAsset]] {
     // Shuffle the never seen before assets randomly
     neverSeenAssets.shuffle()
 
-    // Shuffle and bias the seen assets
+    // Shuffle and bias the seen assets by recency
     seenAssets.shuffle()
     seenAssets.sort { group1, group2 in
-        let dateLastSeen1 = StorageManager.shared.getLastSeenTime(assetId: group1.first?.localIdentifier)!
-        let dateLastSeen2 = StorageManager.shared.getLastSeenTime(assetId: group2.first?.localIdentifier)!
-        let assetMonth1 = Calendar.current.component(.month, from: dateLastSeen1)
-        let assetMonth2 = Calendar.current.component(.month, from: dateLastSeen2)
-        let assetYear1 = Calendar.current.component(.year, from: dateLastSeen1)
-        let assetYear2 = Calendar.current.component(.year, from: dateLastSeen2)
+        guard let dateLastSeen1 = StorageManager.shared.getLastSeenTime(assetId: group1.first?.localIdentifier),
+              let dateLastSeen2 = StorageManager.shared.getLastSeenTime(assetId: group2.first?.localIdentifier) else {
+            return false
+        }
 
-        let olderBias1 = dateLastSeen1 < dateLastSeen2 ? recencyBiasStrength : 0
-        let olderBias2 = dateLastSeen2 < dateLastSeen1 ? recencyBiasStrength : 0
-        let seasonBias1 = (assetMonth1 == currentMonth && assetYear1 < currentYear) ? seasonBiasStrength : 0
-        let seasonBias2 = (assetMonth2 == currentMonth && assetYear2 < currentYear) ? seasonBiasStrength : 0
-
-        return olderBias1 + seasonBias1 > olderBias2 + seasonBias2
+        // Bias toward older (less recently seen) photos
+        return dateLastSeen1 < dateLastSeen2
     }
 
     // Append the previously seen to the end of the never before seen
