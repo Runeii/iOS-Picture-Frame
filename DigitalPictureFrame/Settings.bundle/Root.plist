@@ -20,7 +20,7 @@
 		</dict>
 		<dict>
 			<key>Title</key>
-			<string>Side Duration (secs)</string>
+			<string>Slide Duration (secs)</string>
 			<key>Key</key>
 			<string>slide_duration</string>
 			<key>Type</key>

@@ -34,6 +34,9 @@ struct DigitalPictureFrameApp: App {
     @State private var showingCacheProgress = false
     @State private var isInitialLoad = true
     
+    // Track album state for change detection
+    @State private var lastAssetCount: Int = 0
+    
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -133,13 +136,69 @@ struct DigitalPictureFrameApp: App {
         
         let interval = UserDefaults.standard.double(forKey: "check_duration")
         self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            print("Timer fired: fetch photo updates")
+            print("Timer fired: checking for photo updates")
             isInitialLoad = false // Subsequent fetches are incremental
-            fetchPhotosFromAlbum()
+            checkForAlbumChanges()
         }
         
         if let timer = self.hourlyFetchTimer {
             RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+
+    // Check if albums have changed before doing expensive fetch operations
+    func checkForAlbumChanges() {
+        guard let album = selectedAlbum else {
+            return
+        }
+        
+        DispatchQueue.global(qos: .utility).async {
+            var totalAssetCount = 0
+            
+            // Check main album
+            let mainAlbumAssets = PHAsset.fetchAssets(in: album, options: PHFetchOptions())
+            totalAssetCount += mainAlbumAssets.count
+            print("Main album asset count: \(mainAlbumAssets.count)")
+
+            // Check secondary album if configured
+            let secondaryAlbumName = UserDefaults.standard.string(forKey: "secondary_album")
+            
+            if let secondaryName = secondaryAlbumName, !secondaryName.isEmpty {
+                let sharedAlbumOptions = PHFetchOptions()
+                sharedAlbumOptions.predicate = NSPredicate(format: "title = %@", secondaryName)
+                let sharedAlbums = PHAssetCollection.fetchAssetCollections(
+                    with: .album,
+                    subtype: .albumCloudShared,
+                    options: sharedAlbumOptions
+                )
+                
+                if let sharedAlbum = sharedAlbums.firstObject {
+                    let secondaryAssets = PHAsset.fetchAssets(in: sharedAlbum, options: PHFetchOptions())
+                    totalAssetCount += secondaryAssets.count
+                    print("Secondary album asset count: \(secondaryAssets.count)")
+                }
+            }
+            
+            print("Total asset count in monitored albums: \(totalAssetCount)")
+            DispatchQueue.main.async {
+                let hasCountChanged = totalAssetCount != self.lastAssetCount
+                
+                if hasCountChanged || self.lastAssetCount == 0 {
+                    if self.lastAssetCount == 0 {
+                        print("Album changes detected - first run")
+                    } else {
+                        print("Album changes detected - count changed (\(self.lastAssetCount) → \(totalAssetCount))")
+                    }
+                    
+                    // Update our tracking variable
+                    self.lastAssetCount = totalAssetCount
+                    
+                    // Proceed with full fetch
+                    self.fetchPhotosFromAlbum()
+                } else {
+                    print("No album changes detected - skipping fetch")
+                }
+            }
         }
     }
 
@@ -255,15 +314,51 @@ struct DigitalPictureFrameApp: App {
     private func handleCacheComplete() {
         self.showingCacheProgress = false
         self.isInitialLoad = false
+        self.currentImageIndex = 0
         print("Image caching complete.")
-        if self.currentImageIndex < 0 || self.currentImageIndex >= self.photoAssets.count {
-            self.currentImageIndex = 0
-        }
         
         self.jumpToNextSlide()
         
         let stats = self.imageCache.getCacheStats()
         print("✅ Cache updated! Count: \(stats.count), Memory: \(stats.memoryUsage)")
+        
+        // Update tracking variables after successful fetch and cache
+        updateAlbumTrackingState()
+    }
+    
+    // Update our tracking variables to reflect current album state
+    private func updateAlbumTrackingState() {
+        guard let album = selectedAlbum else { return }
+        
+        DispatchQueue.global(qos: .utility).async {
+            var totalAssetCount = 0
+            
+            // Count main album
+            let mainAlbumAssets = PHAsset.fetchAssets(in: album, options: PHFetchOptions())
+            totalAssetCount += mainAlbumAssets.count
+            
+            // Count secondary album if configured
+            let secondaryAlbumName = UserDefaults.standard.string(forKey: "secondary_album")
+            if let secondaryName = secondaryAlbumName, !secondaryName.isEmpty {
+                let sharedAlbumOptions = PHFetchOptions()
+                sharedAlbumOptions.predicate = NSPredicate(format: "title = %@", secondaryName)
+                let sharedAlbums = PHAssetCollection.fetchAssetCollections(
+                    with: .album,
+                    subtype: .albumCloudShared,
+                    options: sharedAlbumOptions
+                )
+                
+                if let sharedAlbum = sharedAlbums.firstObject {
+                    let secondaryAssets = PHAsset.fetchAssets(in: sharedAlbum, options: PHFetchOptions())
+                    totalAssetCount += secondaryAssets.count
+                }
+            }
+            
+            DispatchQueue.main.async {
+                self.lastAssetCount = totalAssetCount
+                print("📊 Album state tracking initialized - Count: \(totalAssetCount)")
+            }
+        }
     }
 
      func jumpToNextSlide() {
