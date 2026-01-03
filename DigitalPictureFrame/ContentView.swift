@@ -91,6 +91,9 @@ struct ContentView: View {
                     self.nextLeftImage = nil
                     self.nextRightImage = nil
                     self.fadeProgress = 1.0
+                    
+                    // Start the slideshow timer for the first image
+                    self.onSlideDisplayed(displayImageIndex)
                 }
             }
         }
