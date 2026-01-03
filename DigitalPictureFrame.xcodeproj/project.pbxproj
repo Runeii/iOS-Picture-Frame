@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		49234B4C2F094A4F0047407B /* ImageCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49234B4B2F094A4F0047407B /* ImageCacheManager.swift */; };
 		49234B4D2F094A4F0047407B /* CacheProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49234B4A2F094A4F0047407B /* CacheProgressView.swift */; };
+		49234B4F2F0957A50047407B /* LoadingProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49234B4E2F0957A50047407B /* LoadingProgressView.swift */; };
 		4935230A2C95C61A005022EC /* DebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 493523092C95C61A005022EC /* DebugLog.swift */; };
 		494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */; };
 		494FEC1B2C8EF4DC009A2031 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494FEC1A2C8EF4DC009A2031 /* ContentView.swift */; };
@@ -24,6 +25,7 @@
 /* Begin PBXFileReference section */
 		49234B4A2F094A4F0047407B /* CacheProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheProgressView.swift; sourceTree = "<group>"; };
 		49234B4B2F094A4F0047407B /* ImageCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheManager.swift; sourceTree = "<group>"; };
+		49234B4E2F0957A50047407B /* LoadingProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingProgressView.swift; sourceTree = "<group>"; };
 		493523092C95C61A005022EC /* DebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLog.swift; sourceTree = "<group>"; };
 		494FEC152C8EF4DC009A2031 /* DigitalPictureFrame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DigitalPictureFrame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DigitalPictureFrameApp.swift; sourceTree = "<group>"; };
@@ -74,6 +76,7 @@
 				49234B4A2F094A4F0047407B /* CacheProgressView.swift */,
 				49234B4B2F094A4F0047407B /* ImageCacheManager.swift */,
 				494FEC182C8EF4DC009A2031 /* DigitalPictureFrameApp.swift */,
+				49234B4E2F0957A50047407B /* LoadingProgressView.swift */,
 				494FEC1A2C8EF4DC009A2031 /* ContentView.swift */,
 				494FEC1C2C8EF4DD009A2031 /* Assets.xcassets */,
 				494FEC1E2C8EF4DD009A2031 /* Preview Content */,
@@ -172,6 +175,7 @@
 				494FEC192C8EF4DC009A2031 /* DigitalPictureFrameApp.swift in Sources */,
 				49FF01EE2C9157BC0066F8F9 /* StorageManager.swift in Sources */,
 				49F670672D17094F0003F45F /* AlbumSelectionView.swift in Sources */,
+				49234B4F2F0957A50047407B /* LoadingProgressView.swift in Sources */,
 				496CAC8A2C9000FE0059E50C /* PowerSavingManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -304,7 +308,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_ASSET_PATHS = "\"DigitalPictureFrame/Preview Content\"";
 				DEVELOPMENT_TEAM = JU56H8W746;
 				ENABLE_PREVIEWS = YES;
@@ -343,7 +347,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_ASSET_PATHS = "\"DigitalPictureFrame/Preview Content\"";
 				DEVELOPMENT_TEAM = JU56H8W746;
 				ENABLE_PREVIEWS = YES;

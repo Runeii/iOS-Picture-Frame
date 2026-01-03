@@ -32,6 +32,9 @@ struct DigitalPictureFrameApp: App {
     
     @StateObject private var imageCache = ImageCacheManager.shared
     @State private var showingCacheProgress = false
+    @State private var showingLoadingProgress = false
+    @State private var loadingProgress: Float = 0.0
+    @State private var loadingStep: String = ""
     @State private var isInitialLoad = true
     
     // Track album state for change detection
@@ -60,6 +63,8 @@ struct DigitalPictureFrameApp: App {
                                 self.startNextSlideTimer()
                             }
                         }, perform: {})
+                    } else if showingLoadingProgress {
+                        LoadingProgressView(progress: loadingProgress, currentStep: loadingStep, isInitialLoad: isInitialLoad)
                     } else if showingCacheProgress {
                         CacheProgressView(progress: imageCache.cachingProgress, isInitialLoad: isInitialLoad)
                     }
@@ -226,6 +231,13 @@ struct DigitalPictureFrameApp: App {
             return
         }
         
+        // Show loading progress only on initial load
+        if isInitialLoad {
+            showingLoadingProgress = true
+            loadingProgress = 0.0
+            loadingStep = "Fetching album contents..."
+        }
+        
         DispatchQueue.global(qos: .userInitiated).async {
             let assetFetchOptions = PHFetchOptions()
             assetFetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
@@ -236,6 +248,13 @@ struct DigitalPictureFrameApp: App {
             // Fetch from selected album
             let selectedAlbumResults = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
             print("Found \(selectedAlbumResults.count) photos in selected album")
+            
+            if self.isInitialLoad {
+                DispatchQueue.main.async {
+                    self.loadingProgress = 0.1
+                    self.loadingStep = "Loading \(selectedAlbumResults.count) photos..."
+                }
+            }
             
             // Add assets from selected album
             selectedAlbumResults.enumerateObjects { (asset, _, _) in
@@ -260,6 +279,13 @@ struct DigitalPictureFrameApp: App {
                     let sharedAlbumResults = PHAsset.fetchAssets(in: sharedAlbum, options: assetFetchOptions)
                     print("Found \(sharedAlbumResults.count) photos in secondary album")
                     
+                    if self.isInitialLoad {
+                        DispatchQueue.main.async {
+                            self.loadingProgress = 0.15
+                            self.loadingStep = "Loading secondary album..."
+                        }
+                    }
+                    
                     // Add assets from shared album
                     sharedAlbumResults.enumerateObjects { (asset, _, _) in
                         allAssets.append(asset)
@@ -271,8 +297,17 @@ struct DigitalPictureFrameApp: App {
                 print("Total photos after merge: \(allAssets.count)")
             }
             
+            let progressCallback: (Float, String) -> Void = { progress, step in
+                if self.isInitialLoad {
+                    DispatchQueue.main.async {
+                        // Map progress from 0-1 to 0.2-0.8 range (leaving room for fetch and cache phases)
+                        self.loadingProgress = 0.2 + (progress * 0.6)
+                        self.loadingStep = step
+                    }
+                }
+            }
             
-            let formattedResult = processAssets(assets: allAssets)
+            let formattedResult = processAssets(assets: allAssets, progressCallback: progressCallback)
             
             print("Formatted \(formattedResult.count) photos")
             
@@ -283,8 +318,12 @@ struct DigitalPictureFrameApp: App {
                 if newCount != oldCount || self.isInitialLoad {
                     if self.isInitialLoad {
                         print("Initial load: caching \(newCount) photos")
+                        // Hide loading progress and show cache progress
+                        self.showingLoadingProgress = false
+                        self.showingCacheProgress = true
                     } else {
                         print("Change detected: \(newCount - oldCount) photos difference")
+                        self.showingCacheProgress = true
                     }
                     
                     self.photoAssets = formattedResult
@@ -293,7 +332,6 @@ struct DigitalPictureFrameApp: App {
                     self.imageCache.cleanupRemovedAssets(currentAssets: formattedResult)
                     
                     // Start caching (incremental for updates, full for initial load)
-                    self.showingCacheProgress = true
                     
                     if self.isInitialLoad {
                         // Full cache for initial load

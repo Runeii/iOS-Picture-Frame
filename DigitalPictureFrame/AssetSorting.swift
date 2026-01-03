@@ -83,31 +83,42 @@ extension PHAsset {
     }
 }
 
-func processAssets(assets: [PHAsset]) -> [PHAsset] {
+func processAssets(assets: [PHAsset], progressCallback: @escaping (Float, String) -> Void = { _, _ in }) -> [PHAsset] {
     let start_time = Date()
     print("Starting asset processing...", start_time)
+    
+    progressCallback(0.0, "Removing duplicate photos...")
     let filteredAssets = filterDuplicates(assets: assets)
     print("Assets after duplicate filtering: \(filteredAssets.count)")
     print("Duration: \(Date().timeIntervalSince(start_time))s")
+    
+    progressCallback(0.25, "Applying seasonal filters...")
     let timeframedAssets = restrictToTimeFrame(assets: filteredAssets)
 
     // Step 1: Separate into landscape and portrait
     print("Total assets after filtering: \(timeframedAssets.count)")
+    progressCallback(0.4, "Separating landscape and portrait photos...")
     let (landscape, portrait) = separateAssets(assets: timeframedAssets)
 
     // Step 2: Group portraits into pairs by date
     print("Landscape assets: \(landscape.count), Portrait assets: \(portrait.count)")
+    progressCallback(0.55, "Grouping portrait photos...")
     let portraitPairs = groupPortraits(assets: portrait)
 
     // Step 3: Shuffle portrait pairs and landscapes with bias
     print("Portrait pairs formed: \(portraitPairs.count)")
+    progressCallback(0.7, "Applying smart ordering...")
     let biasedPortraitPairs = biasAssets(assets: portraitPairs)
     print("Biasing landscapes...")
     let biasedLandscapes = biasAssets(assets: landscape.map { [$0] }).flatMap { $0 }
 
     // Step 4: Interleave the biased portrait pairs and landscapes
     print("Interleaving portraits and landscapes...")
-    return interleavePortraitsAndLandscapes(portraits: biasedPortraitPairs, landscapes: biasedLandscapes)
+    progressCallback(0.9, "Finalizing photo order...")
+    let result = interleavePortraitsAndLandscapes(portraits: biasedPortraitPairs, landscapes: biasedLandscapes)
+    
+    progressCallback(1.0, "Processing complete!")
+    return result
 }
 
 // New function to print a timeline of assets grouped by month and year
