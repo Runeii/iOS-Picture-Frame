@@ -9,62 +9,104 @@ import Foundation
 import Photos
 
 extension PHAsset {
-    // Computed property that attempts to extract a custom date from the filename or falls back to creationDate
-    var customDate: Date {
-        if let filename = self.filename, let dateFromFilename = extractDateFromFilename(filename) {
-            return dateFromFilename
-        } else {
-            return self.creationDate ?? Date.distantPast
+    // Cache storage
+    private static var filenameCache = [String: String]()
+    private static var customDateCache = [String: Date]()
+    private static var dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        return formatter
+    }()
+    private static var regex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "\\b(\\d{8})([-_\\.])")
+    }()
+    
+    // Cached computed property for filename
+    var filename: String? {
+        let identifier = self.localIdentifier
+        
+        // Check cache first
+        if let cached = PHAsset.filenameCache[identifier] {
+            return cached
         }
+        
+        // Fetch and cache
+        let resources = PHAssetResource.assetResources(for: self)
+        let filename = resources.first?.originalFilename
+        
+        if let filename = filename {
+            PHAsset.filenameCache[identifier] = filename
+        }
+        
+        return filename
     }
     
-    // Helper to retrieve the filename of the asset
-    var filename: String? {
-        let resources = PHAssetResource.assetResources(for: self)
-        return resources.first?.originalFilename
+    // Cached computed property for customDate
+    var customDate: Date {
+        let identifier = self.localIdentifier
+        
+        // Check cache first
+        if let cached = PHAsset.customDateCache[identifier] {
+            return cached
+        }
+        
+        // Calculate date
+        let date: Date
+        if let filename = self.filename, let dateFromFilename = extractDateFromFilename(filename) {
+            date = dateFromFilename
+        } else {
+            date = self.creationDate ?? Date.distantPast
+        }
+        
+        // Cache it
+        PHAsset.customDateCache[identifier] = date
+        return date
     }
     
     // Helper function to extract date from filename in YYYYMMDD format
     private func extractDateFromFilename(_ filename: String) -> Date? {
-        let regexPattern = "\\b(\\d{8})([-_\\.])"
-        let regex = try? NSRegularExpression(pattern: regexPattern)
+        guard let regex = PHAsset.regex else { return nil }
         
-        if let match = regex?.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
+        if let match = regex.firstMatch(in: filename, range: NSRange(filename.startIndex..., in: filename)),
            let dateRange = Range(match.range(at: 1), in: filename) {
             
             let dateString = String(filename[dateRange])
-            
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyyMMdd"
-            
-            return dateFormatter.date(from: dateString)
+            return PHAsset.dateFormatter.date(from: dateString)
         }
         return nil
     }
-    // Computed property to check if customDate has the default time of 00:00:00
-    var hasDefaultTime: Bool {
-        let calendar = Calendar.current
-        let components = calendar.dateComponents([.hour, .minute, .second], from: self.customDate)
-        return components.hour == 0 && components.minute == 0 && components.second == 0
+    
+    // Optional: Clear cache if needed (call when photo library changes)
+    static func clearCache() {
+        filenameCache.removeAll()
+        customDateCache.removeAll()
     }
 }
 
 func processAssets(assets: [PHAsset]) -> [PHAsset] {
+    let start_time = Date()
+    print("Starting asset processing...", start_time)
     let filteredAssets = filterDuplicates(assets: assets)
-
+    print("Assets after duplicate filtering: \(filteredAssets.count)")
+    print("Duration: \(Date().timeIntervalSince(start_time))s")
     let timeframedAssets = restrictToTimeFrame(assets: filteredAssets)
 
     // Step 1: Separate into landscape and portrait
+    print("Total assets after filtering: \(timeframedAssets.count)")
     let (landscape, portrait) = separateAssets(assets: timeframedAssets)
 
     // Step 2: Group portraits into pairs by date
+    print("Landscape assets: \(landscape.count), Portrait assets: \(portrait.count)")
     let portraitPairs = groupPortraits(assets: portrait)
 
     // Step 3: Shuffle portrait pairs and landscapes with bias
+    print("Portrait pairs formed: \(portraitPairs.count)")
     let biasedPortraitPairs = biasAssets(assets: portraitPairs)
+    print("Biasing landscapes...")
     let biasedLandscapes = biasAssets(assets: landscape.map { [$0] }).flatMap { $0 }
 
     // Step 4: Interleave the biased portrait pairs and landscapes
+    print("Interleaving portraits and landscapes...")
     return interleavePortraitsAndLandscapes(portraits: biasedPortraitPairs, landscapes: biasedLandscapes)
 }
 
@@ -113,22 +155,34 @@ func filterDuplicates(assets: [PHAsset]) -> [PHAsset] {
     var uniqueDates = Set<Date>()
     var uniqueFilenames = Set<String>()
     var filteredAssets = [PHAsset]()
-
-    assets.forEach { (asset) in
+    
+    // Cache calendar for hasDefaultTime checks
+    let calendar = Calendar.current
+    
+    assets.forEach { asset in
         guard let filename = asset.value(forKey: "filename") as? String else {
             return
         }
         
-        // If there's no time component or if the date is unique, proceed
-        if asset.hasDefaultTime || !uniqueDates.contains(asset.customDate) {
-            // Check if the filename is unique
-            if !uniqueFilenames.contains(filename) {
-                uniqueDates.insert(asset.customDate)
-                uniqueFilenames.insert(filename)
-                filteredAssets.append(asset)
-            }
+        // Check if has default time (inline to avoid repeated calendar creation)
+        let components = calendar.dateComponents([.hour, .minute, .second], from: asset.customDate)
+        let hasDefaultTime = components.hour == 0 && components.minute == 0 && components.second == 0
+        
+        // For default time: only check filename uniqueness
+        // For precise time: check both date and filename uniqueness
+        let shouldInclude: Bool
+        if hasDefaultTime {
+            shouldInclude = uniqueFilenames.insert(filename).inserted
+        } else {
+            shouldInclude = uniqueDates.insert(asset.customDate).inserted &&
+                           uniqueFilenames.insert(filename).inserted
+        }
+        
+        if shouldInclude {
+            filteredAssets.append(asset)
         }
     }
+    
     return filteredAssets
 }
 

@@ -32,15 +32,19 @@ class ImageCacheManager: ObservableObject {
             
             for (index, asset) in assets.enumerated() {
                 group.enter()
-                
-                // Determine target size based on orientation
+
                 let targetSize: CGSize
+                let screenPixelSize = CGSize(
+                    width: UIScreen.main.bounds.width * UIScreen.main.scale,
+                    height: UIScreen.main.bounds.height * UIScreen.main.scale
+                )
+
                 if asset.pixelHeight > asset.pixelWidth {
                     // Portrait - half screen width
-                    targetSize = CGSize(width: UIScreen.main.bounds.width / 2, height: UIScreen.main.bounds.height)
+                    targetSize = CGSize(width: screenPixelSize.width / 2, height: screenPixelSize.height)
                 } else {
                     // Landscape - full screen
-                    targetSize = UIScreen.main.bounds.size
+                    targetSize = screenPixelSize
                 }
                 
                 self.downloadAndCacheImage(asset: asset, targetSize: targetSize) { success in

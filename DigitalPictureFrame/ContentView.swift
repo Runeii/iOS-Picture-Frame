@@ -80,11 +80,18 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            print("currentImageIndex", currentImageIndex)
-            displayImageIndex = currentImageIndex // Initialize display index
-            if displayImageIndex >= 0 {
-                print("displayImageIndex", displayImageIndex)
-                loadImages(for: displayImageIndex)
+            print("ContentView appeared - currentImageIndex: \(currentImageIndex)")
+            displayImageIndex = currentImageIndex
+            if displayImageIndex >= 0 && displayImageIndex < photoAssets.count {
+                print("Loading initial images for displayImageIndex: \(displayImageIndex)")
+                loadImages(for: displayImageIndex) {
+                    // Set current images immediately (no crossfade for initial load)
+                    self.currentLeftImage = self.nextLeftImage
+                    self.currentRightImage = self.nextRightImage
+                    self.nextLeftImage = nil
+                    self.nextRightImage = nil
+                    self.fadeProgress = 1.0
+                }
             }
         }
         .onChange(of: currentImageIndex) { newIndex in
