@@ -153,17 +153,55 @@ struct DigitalPictureFrameApp: App {
             let assetFetchOptions = PHFetchOptions()
             assetFetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
             assetFetchOptions.fetchLimit = 0
-
-            let result = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
             
-            print("Found \(result.count) photos")
-            let formattedResult = processAssets(assets: result)
+            var allAssets: [PHAsset] = []
+            
+            // Fetch from selected album
+            let selectedAlbumResults = PHAsset.fetchAssets(in: album, options: assetFetchOptions)
+            print("Found \(selectedAlbumResults.count) photos in selected album")
+            
+            // Add assets from selected album
+            selectedAlbumResults.enumerateObjects { (asset, _, _) in
+                allAssets.append(asset)
+            }
+
+            let secondaryAlbumName = UserDefaults.standard.string(forKey: "secondary_album")
+            
+            if secondaryAlbumName != nil && secondaryAlbumName != "" {
+                print("Has secondary album defined", secondaryAlbumName!)
+                // Fetch shared albums
+                let sharedAlbumOptions = PHFetchOptions()
+                sharedAlbumOptions.predicate = NSPredicate(format: "title = %@", secondaryAlbumName!)
+                let sharedAlbums = PHAssetCollection.fetchAssetCollections(
+                    with: .album,
+                    subtype: .albumCloudShared,
+                    options: sharedAlbumOptions
+                )
+                
+                // Fetch from shared album if found
+                if let sharedAlbum = sharedAlbums.firstObject {
+                    let sharedAlbumResults = PHAsset.fetchAssets(in: sharedAlbum, options: assetFetchOptions)
+                    print("Found \(sharedAlbumResults.count) photos in secondary album")
+                    
+                    // Add assets from shared album
+                    sharedAlbumResults.enumerateObjects { (asset, _, _) in
+                        allAssets.append(asset)
+                    }
+                } else {
+                    print("Shared album \(secondaryAlbumName!) not found")
+                }
+                
+                print("Total photos after merge: \(allAssets.count)")
+            }
+            
+            
+            let formattedResult = processAssets(assets: allAssets)
             
             print("Formatted \(formattedResult.count) photos")
             
             DispatchQueue.main.async {
                 if (formattedResult.count != self.photoAssets.count) {
-                    print("\(formattedResult.count - (self.photoAssets.count ?? 0)) new photos found")
+                    print("\(formattedResult.count - (self.photoAssets.count)) new photos found")
                     
                     self.photoAssets = formattedResult
                     self.currentImageIndex = 0
