@@ -373,7 +373,7 @@ struct DigitalPictureFrameApp: App {
         self.jumpToNextSlide()
         
         let stats = self.imageCache.getCacheStats()
-        print("✅ Cache updated! Count: \(stats.count), Memory: \(stats.memoryUsage)")
+        print("✅ Cache updated! Disk size: \(stats.diskSize), Disk count: \(stats.count)")
         
         // Update tracking variables after successful fetch and cache
         updateAlbumTrackingState()

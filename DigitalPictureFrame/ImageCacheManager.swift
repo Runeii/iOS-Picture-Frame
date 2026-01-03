@@ -5,19 +5,32 @@ import UIKit
 class ImageCacheManager: ObservableObject {
     static let shared = ImageCacheManager()
     
-    private var imageCache: [String: UIImage] = [:]
     private var downloadQueue = DispatchQueue(label: "imageDownloadQueue", qos: .utility)
     private var isCaching = false
     
     @Published var cachingProgress: Float = 0.0
     @Published var isCachingComplete = false
     
+    // Disk cache directory
+    private let diskCacheURL: URL = {
+        let paths = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+        let cacheURL = paths[0].appendingPathComponent("ImageCache")
+        try? FileManager.default.createDirectory(at: cacheURL, withIntermediateDirectories: true)
+        return cacheURL
+    }()
+    
     private init() {}
+    
+    // Helper to sanitize asset identifiers for filenames
+    private func sanitizedFilename(for assetId: String) -> String {
+        // Remove all invalid filename characters
+        let invalid = CharacterSet(charactersIn: "/\\:*?\"<>|")
+        return assetId.components(separatedBy: invalid).joined(separator: "_")
+    }
     
     // Pre-download all images for offline use
     func preloadImages(assets: [PHAsset], completion: @escaping () -> Void) {
         guard !isCaching else { return }
-        
         isCaching = true
         isCachingComplete = false
         cachingProgress = 0.0
@@ -25,36 +38,48 @@ class ImageCacheManager: ObservableObject {
         let totalAssets = assets.count
         var completedAssets = 0
         
-        print("Starting pre-cache of \(totalAssets) images...")
+        print("Starting pre-cache of \(totalAssets) images to disk...")
         
         downloadQueue.async {
             let group = DispatchGroup()
             
             for (index, asset) in assets.enumerated() {
                 group.enter()
-
+                
+                // Check if already cached on disk
+                if self.isImageCachedOnDisk(for: asset.localIdentifier) {
+                    completedAssets += 1
+                    DispatchQueue.main.async {
+                        self.cachingProgress = Float(completedAssets) / Float(totalAssets)
+                        if completedAssets % 10 == 0 || completedAssets == totalAssets {
+                            print("Cached \(completedAssets)/\(totalAssets) images (\(Int(self.cachingProgress * 100))%)")
+                        }
+                    }
+                    group.leave()
+                    continue
+                }
+                
                 let targetSize: CGSize
+                let scale: CGFloat = 3.0
                 let screenPixelSize = CGSize(
-                    width: UIScreen.main.bounds.width * UIScreen.main.scale,
-                    height: UIScreen.main.bounds.height * UIScreen.main.scale
+                    width: UIScreen.main.bounds.width * UIScreen.main.scale * scale,
+                    height: UIScreen.main.bounds.height * UIScreen.main.scale * scale
                 )
-
+                
                 if asset.pixelHeight > asset.pixelWidth {
-                    // Portrait - half screen width
                     targetSize = CGSize(width: screenPixelSize.width / 2, height: screenPixelSize.height)
                 } else {
-                    // Landscape - full screen
                     targetSize = screenPixelSize
                 }
                 
-                self.downloadAndCacheImage(asset: asset, targetSize: targetSize) { success in
+                self.downloadAndCacheImageToDisk(asset: asset, targetSize: targetSize) { success in
                     completedAssets += 1
-                    
                     DispatchQueue.main.async {
                         self.cachingProgress = Float(completedAssets) / Float(totalAssets)
-                        print("Cached \(completedAssets)/\(totalAssets) images (\(Int(self.cachingProgress * 100))%)")
+                        if completedAssets % 10 == 0 || completedAssets == totalAssets {
+                            print("Cached \(completedAssets)/\(totalAssets) images (\(Int(self.cachingProgress * 100))%)")
+                        }
                     }
-                    
                     group.leave()
                 }
                 
@@ -69,13 +94,62 @@ class ImageCacheManager: ObservableObject {
             DispatchQueue.main.async {
                 self.isCaching = false
                 self.isCachingComplete = true
-                print("Image pre-caching complete! Cached \(self.imageCache.count) images")
+                let stats = self.getCacheStats()
+                print("Image pre-caching complete! Cached \(stats.count) images on disk (\(stats.diskSize))")
                 completion()
             }
         }
     }
+    private func downloadAndCacheImageToDisk(asset: PHAsset, targetSize: CGSize, completion: @escaping (Bool) -> Void) {
+        let imageManager = PHImageManager.default()
+        let options = PHImageRequestOptions()
+        options.isSynchronous = false
+        options.deliveryMode = .highQualityFormat
+        options.version = .current
+        options.isNetworkAccessAllowed = true
+        
+        // Create sanitized filename
+        let filename = self.sanitizedFilename(for: asset.localIdentifier)
+        let fileURL = self.diskCacheURL.appendingPathComponent("\(filename).jpg")
+        
+        // Request image data directly (not UIImage) to avoid memory allocation
+        imageManager.requestImageDataAndOrientation(for: asset, options: options) { imageData, dataUTI, orientation, info in
+            guard let imageData = imageData else {
+                print("Failed to load image data for asset: \(asset.localIdentifier)")
+                completion(false)
+                return
+            }
+            
+            do {
+                // Write raw image data directly to disk
+                try imageData.write(to: fileURL)
+                completion(true)
+            } catch {
+                print("Failed to write image to disk: \(error)")
+                print("Attempted path: \(fileURL.path)")
+                completion(false)
+            }
+        }
+    }
+    // Get cached image from disk
+    func getCachedImage(for assetId: String) -> UIImage? {
+        let filename = sanitizedFilename(for: assetId)
+        let fileURL = diskCacheURL.appendingPathComponent("\(filename).jpg")
+        return UIImage(contentsOfFile: fileURL.path)
+    }
     
-    // NEW: Incremental cache update - only cache missing images
+    // Check if image is cached on disk
+    func isImageCached(for assetId: String) -> Bool {
+        return isImageCachedOnDisk(for: assetId)
+    }
+    
+    private func isImageCachedOnDisk(for assetId: String) -> Bool {
+        let filename = sanitizedFilename(for: assetId)
+        let fileURL = diskCacheURL.appendingPathComponent("\(filename).jpg")
+        return FileManager.default.fileExists(atPath: fileURL.path)
+    }
+    
+    // Incremental cache update - only cache missing images
     func updateCache(newAssets: [PHAsset], completion: @escaping () -> Void) {
         let uncachedAssets = newAssets.filter { !isImageCached(for: $0.localIdentifier) }
         
@@ -88,83 +162,59 @@ class ImageCacheManager: ObservableObject {
         }
         
         print("Incrementally caching \(uncachedAssets.count) new images (out of \(newAssets.count) total)...")
-        
-        // Use the existing preloadImages method for the uncached assets
         preloadImages(assets: uncachedAssets, completion: completion)
     }
     
-    // NEW: Remove images from cache that are no longer in the asset list
+    // Remove images from cache that are no longer in the asset list
     func cleanupRemovedAssets(currentAssets: [PHAsset]) {
         let currentAssetIds = Set(currentAssets.map { $0.localIdentifier })
-        let cachedAssetIds = Set(imageCache.keys)
+        let sanitizedCurrentIds = Set(currentAssetIds.map { sanitizedFilename(for: $0) })
         
-        let removedAssetIds = cachedAssetIds.subtracting(currentAssetIds)
+        var removedCount = 0
         
-        if !removedAssetIds.isEmpty {
-            print("Removing \(removedAssetIds.count) images from cache (no longer in album)")
-            for removedId in removedAssetIds {
-                imageCache.removeValue(forKey: removedId)
+        // Clean disk cache
+        if let diskFiles = try? FileManager.default.contentsOfDirectory(at: diskCacheURL, includingPropertiesForKeys: nil) {
+            for fileURL in diskFiles {
+                let filename = fileURL.deletingPathExtension().lastPathComponent
+                if !sanitizedCurrentIds.contains(filename) {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    removedCount += 1
+                }
             }
+        }
+        
+        if removedCount > 0 {
+            print("Cleaned up \(removedCount) removed images from cache")
         }
     }
     
-    private func downloadAndCacheImage(asset: PHAsset, targetSize: CGSize, completion: @escaping (Bool) -> Void) {
-        let imageManager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat
-        options.resizeMode = .exact
-        options.version = .current
-        options.isNetworkAccessAllowed = true // Allow iCloud downloads
-        
-        imageManager.requestImage(
-            for: asset,
-            targetSize: targetSize,
-            contentMode: .aspectFill,
-            options: options
-        ) { image, info in
-            if let image = image {
-                // Cache the image
-                self.imageCache[asset.localIdentifier] = image
-                completion(true)
-            } else {
-                print("Failed to cache image for asset: \(asset.localIdentifier)")
-                completion(false)
-            }
-        }
-    }
-    
-    // Get cached image
-    func getCachedImage(for assetId: String) -> UIImage? {
-        return imageCache[assetId]
-    }
-    
-    // Check if image is cached
-    func isImageCached(for assetId: String) -> Bool {
-        return imageCache[assetId] != nil
-    }
-    
-    // Clear cache (for memory management)
+    // Clear cache
     func clearCache() {
-        imageCache.removeAll()
+        try? FileManager.default.removeItem(at: diskCacheURL)
+        try? FileManager.default.createDirectory(at: diskCacheURL, withIntermediateDirectories: true)
         isCachingComplete = false
         cachingProgress = 0.0
         print("Image cache cleared")
     }
     
     // Get cache statistics
-    func getCacheStats() -> (count: Int, memoryUsage: String) {
-        let count = imageCache.count
+    func getCacheStats() -> (count: Int, diskSize: String) {
+        var diskCount = 0
+        var totalBytes: Int64 = 0
         
-        // Estimate memory usage (rough calculation)
-        var totalBytes = 0
-        for image in imageCache.values {
-            totalBytes += Int(image.size.width * image.size.height * 4) // 4 bytes per pixel (RGBA)
+        if let diskFiles = try? FileManager.default.contentsOfDirectory(at: diskCacheURL, includingPropertiesForKeys: [.fileSizeKey]) {
+            diskCount = diskFiles.count
+            for fileURL in diskFiles {
+                if let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
+                   let fileSize = resourceValues.fileSize {
+                    totalBytes += Int64(fileSize)
+                }
+            }
         }
         
         let mb = Double(totalBytes) / (1024 * 1024)
-        let memoryUsage = String(format: "%.1f MB", mb)
+        let diskSize = String(format: "%.1f MB", mb)
         
-        return (count, memoryUsage)
+        return (diskCount, diskSize)
     }
 }

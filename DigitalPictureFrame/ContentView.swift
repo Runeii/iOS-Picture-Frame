@@ -122,6 +122,10 @@ struct ContentView: View {
                 
                 self.currentLeftImage = self.nextLeftImage // Update current left image
                 self.currentRightImage = self.nextRightImage // Update current right image (for portrait mode)
+                
+                // Log details about the newly set images
+                //self.logImageDetails(for: newIndex)
+                
                 self.nextLeftImage = nil
                 self.nextRightImage = nil
                 self.fadeProgress = 1.0 // Reset fade progress for the next crossfade
@@ -231,6 +235,49 @@ struct ContentView: View {
         }
     }
     
+    // Helper function to log image details
+    private func logImageDetails(for index: Int) {
+        guard index < photoAssets.count else { return }
+        
+        let asset = photoAssets[index]
+        
+        print("=== Setting Current Images ===")
+        print("Left Image - Index: \(index)")
+        print("  Filename: \(asset.value(forKey: "filename") ?? "Unknown")")
+        print("  Creation Date: \(asset.creationDate?.description ?? "Unknown")")
+        print(" Custom Date: \(asset.customDate.description ?? "Unknown")")
+        print("  Dimensions: \(asset.pixelWidth) x \(asset.pixelHeight)")
+        print("  Duration: \(asset.duration) seconds")
+        print("  Media Type: \(asset.mediaType.rawValue == 1 ? "Image" : "Video")")
+        print("  Local Identifier: \(asset.localIdentifier)")
+        
+        if let location = asset.location {
+            print("  Location: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+        } else {
+            print("  Location: None")
+        }
+        
+        // If we're in portrait mode with two images, log the right image too
+        if isPortrait(asset: asset), index + 1 < photoAssets.count {
+            let rightAsset = photoAssets[index + 1]
+            print("Right Image - Index: \(index + 1)")
+            print("  Filename: \(rightAsset.value(forKey: "filename") ?? "Unknown")")
+            print("  Creation Date: \(rightAsset.creationDate?.description ?? "Unknown")")
+            print(" Custom Date: \(rightAsset.customDate.description ?? "Unknown")")
+            print("  Dimensions: \(rightAsset.pixelWidth) x \(rightAsset.pixelHeight)")
+            print("  Duration: \(rightAsset.duration) seconds")
+            print("  Media Type: \(rightAsset.mediaType.rawValue == 1 ? "Image" : "Video")")
+            print("  Local Identifier: \(rightAsset.localIdentifier)")
+            
+            if let location = rightAsset.location {
+                print("  Location: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+            } else {
+                print("  Location: None")
+            }
+        }
+        print("============================")
+    }
+
     // Helper function to clean up old images and free memory
     private func cleanupOldImages() {
         // Allow previous images to be deallocated

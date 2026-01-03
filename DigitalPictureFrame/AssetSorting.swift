@@ -166,8 +166,6 @@ func filterDuplicates(assets: [PHAsset]) -> [PHAsset] {
     var uniqueDates = Set<Date>()
     var uniqueFilenames = Set<String>()
     var filteredAssets = [PHAsset]()
-    
-    // Cache calendar for hasDefaultTime checks
     let calendar = Calendar.current
     
     assets.forEach { asset in
@@ -175,25 +173,25 @@ func filterDuplicates(assets: [PHAsset]) -> [PHAsset] {
             return
         }
         
-        // Check if has default time (inline to avoid repeated calendar creation)
-        let components = calendar.dateComponents([.hour, .minute, .second], from: asset.customDate)
+        // Normalize date to remove subseconds
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: asset.customDate)
+        guard let normalizedDate = calendar.date(from: components) else {
+            return
+        }
+        
         let hasDefaultTime = components.hour == 0 && components.minute == 0 && components.second == 0
         
-        // For default time: only check filename uniqueness
-        // For precise time: check both date and filename uniqueness
         let shouldInclude: Bool
         if hasDefaultTime {
             shouldInclude = uniqueFilenames.insert(filename).inserted
         } else {
-            shouldInclude = uniqueDates.insert(asset.customDate).inserted &&
-                           uniqueFilenames.insert(filename).inserted
+            shouldInclude = uniqueDates.insert(normalizedDate).inserted
         }
         
         if shouldInclude {
             filteredAssets.append(asset)
         }
     }
-    
     return filteredAssets
 }
 
