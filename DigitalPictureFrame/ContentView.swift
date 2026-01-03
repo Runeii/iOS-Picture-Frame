@@ -19,6 +19,9 @@ struct ContentView: View {
     @State private var fadeProgress: Double = 1.0
     
     @State private var locationName: String? = nil
+    @State private var currentGeocoder: CLGeocoder?
+    
+    private let imageCache = ImageCacheManager.shared
     
     var body: some View {
         ZStack {
@@ -89,6 +92,9 @@ struct ContentView: View {
             
             self.locationName = "Loading..."
         }
+        .onDisappear {
+            cleanupOldImages()
+        }
     }
 
     // Function to handle crossfade to the new image(s)
@@ -101,6 +107,9 @@ struct ContentView: View {
             
             // After the crossfade is complete, switch images
             DispatchQueue.main.asyncAfter(deadline: .now() + UserDefaults.standard.double(forKey: "fade_duration")) {
+                // Clean up old images to free memory
+                self.cleanupOldImages()
+                
                 self.currentLeftImage = self.nextLeftImage // Update current left image
                 self.currentRightImage = self.nextRightImage // Update current right image (for portrait mode)
                 self.nextLeftImage = nil
@@ -112,58 +121,46 @@ struct ContentView: View {
         }
     }
 
-    // Helper function to load both portrait and landscape images
+    // Helper function to load both portrait and landscape images FROM CACHE
     func loadImages(for index: Int, completion: (() -> Void)? = nil) {
-        let targetSize = CGSize(width: UIScreen.main.bounds.width / 2, height: UIScreen.main.bounds.height)
-
+        guard index < photoAssets.count else {
+            completion?()
+            return
+        }
+        
         if isPortrait(asset: photoAssets[index]), index + 1 < photoAssets.count {
-            // Load two portrait images side by side
-            loadImage(for: photoAssets[index], targetSize: targetSize) { image in
-                self.nextLeftImage = image
-                if let _ = self.nextRightImage {
-                    completion?()
-                }
+            // Load two portrait images side by side from cache
+            let leftAsset = photoAssets[index]
+            let rightAsset = photoAssets[index + 1]
+            
+            self.nextLeftImage = imageCache.getCachedImage(for: leftAsset.localIdentifier)
+            self.nextRightImage = imageCache.getCachedImage(for: rightAsset.localIdentifier)
+            
+            if nextLeftImage == nil {
+                print("Warning: Left portrait image not in cache: \(leftAsset.localIdentifier)")
             }
-
-            loadImage(for: photoAssets[index + 1], targetSize: targetSize) { image in
-                self.nextRightImage = image
-                if let _ = self.nextLeftImage {
-                    completion?()
-                }
+            if nextRightImage == nil {
+                print("Warning: Right portrait image not in cache: \(rightAsset.localIdentifier)")
             }
+            
+            completion?()
         } else {
-            // Load a single landscape image
-            loadImage(for: photoAssets[index], targetSize: UIScreen.main.bounds.size) { image in
-                self.nextLeftImage = image
-                self.nextRightImage = nil // Reset right image since it's landscape
-                completion?()
+            // Load a single landscape image from cache
+            let asset = photoAssets[index]
+            self.nextLeftImage = imageCache.getCachedImage(for: asset.localIdentifier)
+            self.nextRightImage = nil
+            
+            if nextLeftImage == nil {
+                print("Warning: Landscape image not in cache: \(asset.localIdentifier)")
             }
+            
+            completion?()
         }
     }
 
     // Check if the asset is portrait
     func isPortrait(asset: PHAsset) -> Bool {
         return asset.pixelHeight > asset.pixelWidth
-    }
-
-    // Helper function to load an image for a PHAsset
-    func loadImage(for asset: PHAsset, targetSize: CGSize, handler: @escaping (UIImage?) -> Void) {
-        let imageManager = PHImageManager.default()
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat  // Continue with high-quality format
-        options.resizeMode = .none  // Avoid resizing to preserve quality
-        options.version = .current  // Fetch the current version of the image
-        options.isNetworkAccessAllowed = true  // Allow accessing images from iCloud
-
-        imageManager.requestImage(
-            for: asset,
-            targetSize: targetSize,
-            contentMode: .aspectFill,
-            options: options
-        ) { image, _ in
-            handler(image)
-        }
     }
 
     // Helper view to display an image with specified width
@@ -190,12 +187,16 @@ struct ContentView: View {
     }
 
     func updatePlace() {
+        // Cancel any pending geocoding
+        currentGeocoder?.cancelGeocode()
+        
         guard let location = self.photoAssets[self.currentImageIndex].location else {
             self.locationName = nil
             return
         }
-        let geocoder = CLGeocoder()
-        geocoder.reverseGeocodeLocation(location) { placemarks, error in
+        
+        currentGeocoder = CLGeocoder()
+        currentGeocoder?.reverseGeocodeLocation(location) { placemarks, error in
             guard let place = placemarks?.first, error == nil else {
                 self.locationName = nil
                 return
@@ -218,6 +219,13 @@ struct ContentView: View {
             
             self.locationName = placeName.isEmpty ? nil : placeName
         }
+    }
+    
+    // Helper function to clean up old images and free memory
+    private func cleanupOldImages() {
+        // Allow previous images to be deallocated
+        currentLeftImage = nil
+        currentRightImage = nil
     }
 
 }

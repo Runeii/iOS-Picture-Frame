@@ -49,7 +49,7 @@ extension PHAsset {
     }
 }
 
-func processAssets(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
+func processAssets(assets: [PHAsset]) -> [PHAsset] {
     let filteredAssets = filterDuplicates(assets: assets)
 
     let timeframedAssets = restrictToTimeFrame(assets: filteredAssets)
@@ -109,12 +109,12 @@ func printTimeline(assets: PHFetchResult<PHAsset>) {
 
 
 // 0
-func filterDuplicates(assets: PHFetchResult<PHAsset>) -> [PHAsset] {
+func filterDuplicates(assets: [PHAsset]) -> [PHAsset] {
     var uniqueDates = Set<Date>()
     var uniqueFilenames = Set<String>()
     var filteredAssets = [PHAsset]()
 
-    assets.enumerateObjects { (asset, _, _) in
+    assets.forEach { (asset) in
         guard let filename = asset.value(forKey: "filename") as? String else {
             return
         }

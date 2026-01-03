@@ -29,31 +29,37 @@ struct DigitalPictureFrameApp: App {
 
     @State private var hourlyFetchTimer: Timer? = nil
     @State private var slideTimer: Timer? = nil
-
-    @State private var lightMonitor: LightMonitor?
+    
+    @StateObject private var imageCache = ImageCacheManager.shared
+    @State private var showingCacheProgress = false
+    @State private var isInitialLoad = true
     
     var body: some Scene {
         WindowGroup {
             ZStack {
                 if let album = selectedAlbum {
-                    ContentView(
-                        photoAssets: $photoAssets,
-                        currentImageIndex: $currentImageIndex,
-                        isUserTouching: $isUserTouching,
-                        onSlideDisplayed: { index in
-                            self.startNextSlideTimer()
-                        }
-                    )
-                    .edgesIgnoringSafeArea(.all)
-                    .onLongPressGesture(minimumDuration: .infinity, pressing: { isTouching in
-                        self.isUserTouching = isTouching
+                    if imageCache.isCachingComplete && !photoAssets.isEmpty {
+                        ContentView(
+                            photoAssets: $photoAssets,
+                            currentImageIndex: $currentImageIndex,
+                            isUserTouching: $isUserTouching,
+                            onSlideDisplayed: { index in
+                                self.startNextSlideTimer()
+                            }
+                        )
+                        .edgesIgnoringSafeArea(.all)
+                        .onLongPressGesture(minimumDuration: .infinity, pressing: { isTouching in
+                            self.isUserTouching = isTouching
 
-                        if isTouching {
-                            slideTimer?.invalidate()
-                        } else {
-                            self.startNextSlideTimer()
-                        }
-                    }, perform: {})
+                            if isTouching {
+                                cleanupTimers()
+                            } else {
+                                self.startNextSlideTimer()
+                            }
+                        }, perform: {})
+                    } else if showingCacheProgress {
+                        CacheProgressView(progress: imageCache.cachingProgress, isInitialLoad: isInitialLoad)
+                    }
                 } else if (hasPermission) {
                     AlbumSelectionView(selectedAlbum: $selectedAlbum)
                 }
@@ -78,6 +84,9 @@ struct DigitalPictureFrameApp: App {
                 keepScreenOn()
                 scheduleHourlyPhotoFetch()
             }
+            .onDisappear {
+                cleanupTimers()
+            }
             .onChange(of: selectedAlbum) { album in
                 fetchPhotosFromAlbum()
             }
@@ -93,7 +102,10 @@ struct DigitalPictureFrameApp: App {
             // Reset the toggle to off (so it doesn't reset repeatedly)
             UserDefaults.standard.set(false, forKey: resetKey)
             
-            print("Selected folder identifier reset.")
+            // Also clear image cache when resetting folder
+            imageCache.clearCache()
+            
+            print("Selected folder identifier reset and cache cleared.")
         }
     }
 
@@ -117,12 +129,18 @@ struct DigitalPictureFrameApp: App {
     // Schedule hourly refresh of the album to fetch new photos
     func scheduleHourlyPhotoFetch() {
         print("Scheduling hourly photo fetch")
-        self.hourlyFetchTimer?.invalidate()
-        self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: "check_duration"), repeats: true) { _ in
+        cleanupTimers()
+        
+        let interval = UserDefaults.standard.double(forKey: "check_duration")
+        self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
             print("Timer fired: fetch photo updates")
+            isInitialLoad = false // Subsequent fetches are incremental
             fetchPhotosFromAlbum()
         }
-        RunLoop.main.add(self.hourlyFetchTimer!, forMode: .common)
+        
+        if let timer = self.hourlyFetchTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
     }
 
     func registerUserDefaults() {
@@ -200,15 +218,52 @@ struct DigitalPictureFrameApp: App {
             print("Formatted \(formattedResult.count) photos")
             
             DispatchQueue.main.async {
-                if (formattedResult.count != self.photoAssets.count) {
-                    print("\(formattedResult.count - (self.photoAssets.count)) new photos found")
+                let oldCount = self.photoAssets.count
+                let newCount = formattedResult.count
+                
+                if newCount != oldCount || self.isInitialLoad {
+                    if self.isInitialLoad {
+                        print("Initial load: caching \(newCount) photos")
+                    } else {
+                        print("Change detected: \(newCount - oldCount) photos difference")
+                    }
                     
                     self.photoAssets = formattedResult
-                    self.currentImageIndex = 0
-                    self.jumpToNextSlide()
+                    
+                    // Clean up any removed assets from cache
+                    self.imageCache.cleanupRemovedAssets(currentAssets: formattedResult)
+                    
+                    // Start caching (incremental for updates, full for initial load)
+                    self.showingCacheProgress = true
+                    
+                    if self.isInitialLoad {
+                        // Full cache for initial load
+                        self.imageCache.preloadImages(assets: formattedResult) {
+                            self.handleCacheComplete()
+                        }
+                    } else {
+                        // Incremental cache for updates
+                        self.imageCache.updateCache(newAssets: formattedResult) {
+                            self.handleCacheComplete()
+                        }
+                    }
                 }
             }
         }
+    }
+    
+    private func handleCacheComplete() {
+        self.showingCacheProgress = false
+        self.isInitialLoad = false
+        print("Image caching complete.")
+        if self.currentImageIndex < 0 || self.currentImageIndex >= self.photoAssets.count {
+            self.currentImageIndex = 0
+        }
+        
+        self.jumpToNextSlide()
+        
+        let stats = self.imageCache.getCacheStats()
+        print("✅ Cache updated! Count: \(stats.count), Memory: \(stats.memoryUsage)")
     }
 
      func jumpToNextSlide() {
@@ -235,11 +290,22 @@ struct DigitalPictureFrameApp: App {
 
         // Invalidate any previous timer
         slideTimer?.invalidate()
+        slideTimer = nil
         
         slideTimer = Timer.scheduledTimer(withTimeInterval: UserDefaults.standard.double(forKey: "slide_duration"), repeats: false) { _ in
             jumpToNextSlide()
         }
 
-        RunLoop.main.add(slideTimer!, forMode: .common)
+        if let timer = slideTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+    }
+    
+    // Clean up timers properly when the app terminates
+    private func cleanupTimers() {
+        hourlyFetchTimer?.invalidate()
+        hourlyFetchTimer = nil
+        slideTimer?.invalidate()
+        slideTimer = nil
     }
 }
