@@ -61,16 +61,15 @@ struct ContentView: View {
                     Spacer()
                     if let formattedDate = formatDate(photoAssets[currentImageIndex].customDate, currentRightImage != nil ? photoAssets[currentImageIndex + 1].customDate : nil) {
                         Text(formattedDate)
+                            .foregroundColor(.white)
                             .padding(.bottom, 2)
                     }
                     if locationName != nil {
                         HStack(spacing: 4) {
                             Image(systemName: "mappin.and.ellipse") // Location marker icon
+                                .foregroundColor(.white)
                             Text(locationName!)
-                        }.onAppear {
-                            updatePlace()
-                        }.onChange(of: currentImageIndex) { _ in
-                            updatePlace()
+                                .foregroundColor(.white)
                         }
                     }
                 }.font(.body) // Customize the font as needed
@@ -94,13 +93,15 @@ struct ContentView: View {
                     
                     // Start the slideshow timer for the first image
                     self.onSlideDisplayed(displayImageIndex)
+                    
+                    // Load location for initial image
+                    self.updateLocationForCurrentImage()
                 }
             }
         }
         .onChange(of: currentImageIndex) { newIndex in
             crossfadeToNewImage(for: newIndex)
-            
-            self.locationName = "Loading..."
+            updateLocationForCurrentImage()
         }
         .onDisappear {
             cleanupOldImages()
@@ -200,41 +201,66 @@ struct ContentView: View {
         return "\(formatter.string(from: date1)) / \(formatter.string(from: date2!))"
     }
 
-    func updatePlace() {
+    func updateLocationForCurrentImage() {
         // Cancel any pending geocoding
         currentGeocoder?.cancelGeocode()
         
-        guard let location = self.photoAssets[self.currentImageIndex].location else {
-            self.locationName = nil
+        guard currentImageIndex < photoAssets.count else {
+            locationName = nil
             return
         }
         
+        guard let location = photoAssets[currentImageIndex].location else {
+            locationName = nil
+            return
+        }
+        
+        // Set loading state
+        locationName = "Loading..."
+        
         currentGeocoder = CLGeocoder()
         currentGeocoder?.reverseGeocodeLocation(location) { placemarks, error in
-            guard let place = placemarks?.first, error == nil else {
+            DispatchQueue.main.async {
+                
+                // Check if this is still the current image (user might have moved on)
+                guard self.currentImageIndex < self.photoAssets.count,
+                      self.photoAssets[self.currentImageIndex].location?.coordinate.latitude == location.coordinate.latitude,
+                      self.photoAssets[self.currentImageIndex].location?.coordinate.longitude == location.coordinate.longitude else {
+                    return // Ignore outdated results
+                }
+                
+                guard let place = placemarks?.first, error == nil else {
+                    self.locationName = nil
+                    return
+                }
+                
+                // Create a string from the placemark
+                var placeName = ""
+                
+                if let locality = place.locality {
+                    placeName += locality
+                }
+                
+                if let adminRegion = place.administrativeArea {
+                    placeName += ", \(adminRegion)"
+                }
+                
+                if let country = place.country {
+                    placeName += ", \(country)"
+                }
+                
+                self.locationName = placeName.isEmpty ? nil : placeName
+            }
+        }
+        
+        // Add timeout to prevent indefinite "Loading..."
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+            if self.locationName == "Loading..." {
                 self.locationName = nil
-                return
             }
-            
-            // Create a string from the placemark
-            var placeName = ""
-            
-            if let locality = place.locality {
-                placeName += locality
-            }
-            
-            if let adminRegion = place.administrativeArea {
-                placeName += ", \(adminRegion)"
-            }
-            
-            if let country = place.country {
-                placeName += ", \(country)"
-            }
-            
-            self.locationName = placeName.isEmpty ? nil : placeName
         }
     }
-    
+
     // Helper function to log image details
     private func logImageDetails(for index: Int) {
         guard index < photoAssets.count else { return }
