@@ -197,7 +197,7 @@ func filterDuplicates(assets: [PHAsset]) -> [PHAsset] {
     return filteredAssets
 }
 
-func restrictToTimeFrame(assets: [PHAsset]) -> [PHAsset] {
+public func restrictToTimeFrame(assets: [PHAsset]) -> [PHAsset] {
     // If seasonal filtering is disabled, return all assets
     if !UserDefaults.standard.bool(forKey: "filter_seasonal_photos") {
         return assets

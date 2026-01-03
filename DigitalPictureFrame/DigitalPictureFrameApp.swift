@@ -37,8 +37,8 @@ struct DigitalPictureFrameApp: App {
     @State private var loadingStep: String = ""
     @State private var isInitialLoad = true
     
-    // Track album state for change detection
-    @State private var lastAssetCount: Int = 0
+    // Track album state for change detection (now using filtered count)
+    @State private var lastFilteredAssetCount: Int = 0
     
     var body: some Scene {
         WindowGroup {
@@ -152,18 +152,23 @@ struct DigitalPictureFrameApp: App {
     }
 
     // Check if albums have changed before doing expensive fetch operations
+    // Now uses filtered asset count (after time frame filtering) for better change detection
     func checkForAlbumChanges() {
         guard let album = selectedAlbum else {
             return
         }
         
         DispatchQueue.global(qos: .utility).async {
-            var totalAssetCount = 0
+            var allAssets: [PHAsset] = []
             
-            // Check main album
+            // Fetch main album
             let mainAlbumAssets = PHAsset.fetchAssets(in: album, options: PHFetchOptions())
-            totalAssetCount += mainAlbumAssets.count
             print("Main album asset count: \(mainAlbumAssets.count)")
+            
+            // Add assets from main album
+            mainAlbumAssets.enumerateObjects { (asset, _, _) in
+                allAssets.append(asset)
+            }
 
             // Check secondary album if configured
             let secondaryAlbumName = UserDefaults.standard.string(forKey: "secondary_album")
@@ -179,24 +184,34 @@ struct DigitalPictureFrameApp: App {
                 
                 if let sharedAlbum = sharedAlbums.firstObject {
                     let secondaryAssets = PHAsset.fetchAssets(in: sharedAlbum, options: PHFetchOptions())
-                    totalAssetCount += secondaryAssets.count
                     print("Secondary album asset count: \(secondaryAssets.count)")
+                    
+                    // Add assets from secondary album
+                    secondaryAssets.enumerateObjects { (asset, _, _) in
+                        allAssets.append(asset)
+                    }
                 }
             }
             
-            print("Total asset count in monitored albums: \(totalAssetCount)")
+            // Apply time frame filtering to get the actual count that will be processed
+            let filteredAssets = restrictToTimeFrame(assets: allAssets)
+            let filteredAssetCount = filteredAssets.count
+            
+            print("Total raw asset count: \(allAssets.count)")
+            print("Filtered asset count (after time frame): \(filteredAssetCount)")
+            
             DispatchQueue.main.async {
-                let hasCountChanged = totalAssetCount != self.lastAssetCount
+                let hasCountChanged = filteredAssetCount != self.lastFilteredAssetCount
                 
-                if hasCountChanged || self.lastAssetCount == 0 {
-                    if self.lastAssetCount == 0 {
+                if hasCountChanged || self.lastFilteredAssetCount == 0 {
+                    if self.lastFilteredAssetCount == 0 {
                         print("Album changes detected - first run")
                     } else {
-                        print("Album changes detected - count changed (\(self.lastAssetCount) → \(totalAssetCount))")
+                        print("Album changes detected - filtered count changed (\(self.lastFilteredAssetCount) → \(filteredAssetCount))")
                     }
                     
                     // Update our tracking variable
-                    self.lastAssetCount = totalAssetCount
+                    self.lastFilteredAssetCount = filteredAssetCount
                     
                     // Proceed with full fetch
                     self.fetchPhotosFromAlbum()
@@ -369,13 +384,15 @@ struct DigitalPictureFrameApp: App {
         guard let album = selectedAlbum else { return }
         
         DispatchQueue.global(qos: .utility).async {
-            var totalAssetCount = 0
+            var allAssets: [PHAsset] = []
             
-            // Count main album
+            // Fetch main album
             let mainAlbumAssets = PHAsset.fetchAssets(in: album, options: PHFetchOptions())
-            totalAssetCount += mainAlbumAssets.count
+            mainAlbumAssets.enumerateObjects { (asset, _, _) in
+                allAssets.append(asset)
+            }
             
-            // Count secondary album if configured
+            // Fetch secondary album if configured
             let secondaryAlbumName = UserDefaults.standard.string(forKey: "secondary_album")
             if let secondaryName = secondaryAlbumName, !secondaryName.isEmpty {
                 let sharedAlbumOptions = PHFetchOptions()
@@ -388,13 +405,19 @@ struct DigitalPictureFrameApp: App {
                 
                 if let sharedAlbum = sharedAlbums.firstObject {
                     let secondaryAssets = PHAsset.fetchAssets(in: sharedAlbum, options: PHFetchOptions())
-                    totalAssetCount += secondaryAssets.count
+                    secondaryAssets.enumerateObjects { (asset, _, _) in
+                        allAssets.append(asset)
+                    }
                 }
             }
             
+            // Apply time frame filtering to match what will actually be processed
+            let filteredAssets = restrictToTimeFrame(assets: allAssets)
+            let filteredAssetCount = filteredAssets.count
+            
             DispatchQueue.main.async {
-                self.lastAssetCount = totalAssetCount
-                print("📊 Album state tracking initialized - Count: \(totalAssetCount)")
+                self.lastFilteredAssetCount = filteredAssetCount
+                print("📊 Album state tracking initialized - Raw count: \(allAssets.count), Filtered count: \(filteredAssetCount)")
             }
         }
     }
