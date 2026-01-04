@@ -434,7 +434,6 @@ struct DigitalPictureFrameApp: App {
         }
         
         let nextSlideIndex = (self.currentImageIndex + increment) % self.photoAssets.count
-        print("Next slide: \(self.currentImageIndex) -> \(nextSlideIndex)")
 
         self.currentImageIndex = nextSlideIndex
     }
