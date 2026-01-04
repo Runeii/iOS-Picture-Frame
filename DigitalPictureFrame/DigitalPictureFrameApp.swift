@@ -29,6 +29,7 @@ struct DigitalPictureFrameApp: App {
 
     @State private var hourlyFetchTimer: Timer? = nil
     @State private var slideTimer: Timer? = nil
+    @State private var nextCheckTime: Date? = nil
     
     @StateObject private var imageCache = ImageCacheManager.shared
     @State private var showingCacheProgress = false
@@ -49,6 +50,8 @@ struct DigitalPictureFrameApp: App {
                             photoAssets: $photoAssets,
                             currentImageIndex: $currentImageIndex,
                             isUserTouching: $isUserTouching,
+                            nextCheckTime: nextCheckTime,
+                            totalSlides: photoAssets.count,
                             onSlideDisplayed: { index in
                                 self.startNextSlideTimer()
                             }
@@ -140,10 +143,14 @@ struct DigitalPictureFrameApp: App {
         cleanupTimers()
         
         let interval = UserDefaults.standard.double(forKey: "check_duration")
+        nextCheckTime = Date().addingTimeInterval(interval)
+        
         self.hourlyFetchTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
             print("Timer fired: checking for photo updates")
             isInitialLoad = false // Subsequent fetches are incremental
             checkForAlbumChanges()
+            // Update next check time
+            nextCheckTime = Date().addingTimeInterval(interval)
         }
         
         if let timer = self.hourlyFetchTimer {

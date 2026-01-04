@@ -7,6 +7,8 @@ struct ContentView: View {
     @Binding var photoAssets: [PHAsset]
     @Binding var currentImageIndex: Int
     @Binding var isUserTouching: Bool
+    let nextCheckTime: Date?
+    let totalSlides: Int
 
     var onSlideDisplayed: (Int) -> Void
 
@@ -76,6 +78,25 @@ struct ContentView: View {
                     .opacity(isUserTouching || UserDefaults.standard.bool(forKey: "always_show_labels") ? 1.0 : 0.0)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding([.leading, .bottom], 16)
+                
+                // Bottom-right info overlay
+                if currentLeftImage != nil && UserDefaults.standard.bool(forKey: "debug_info") {
+                    VStack(alignment: .trailing) {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            if let nextCheck = nextCheckTime {
+                                Text("Next check at: \(formatTime(nextCheck))")
+                                    .foregroundColor(.white)
+                                    .font(.caption)
+                            }
+                            Text("Current index: \(getCurrentSlideNumber()) / \(totalSlides)")
+                                .foregroundColor(.white)
+                                .font(.caption)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding([.trailing, .bottom], 16)
+                }
             }
         }
         .onAppear {
@@ -199,6 +220,16 @@ struct ContentView: View {
         
         // If date1 and date2 are different, format and return "date1 / date2"
         return "\(formatter.string(from: date1)) / \(formatter.string(from: date2!))"
+    }
+    
+    func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
+    func getCurrentSlideNumber() -> Int {
+        return currentImageIndex + 1
     }
 
     func updateLocationForCurrentImage() {
