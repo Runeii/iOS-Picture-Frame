@@ -377,9 +377,6 @@ struct DigitalPictureFrameApp: App {
         self.currentImageIndex = 0
         print("Image caching complete.")
         
-        // Don't call jumpToNextSlide() here - let ContentView handle the initial slide display
-        // and the timer will handle subsequent slides
-        
         let stats = self.imageCache.getCacheStats()
         print("✅ Cache updated! Disk size: \(stats.diskSize), Disk count: \(stats.count)")
         
